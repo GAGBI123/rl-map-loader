@@ -49,74 +49,29 @@ def write_export(idx, nodes_fn, note):
     out[ex['off']:ex['off'] + ex['size']] = blob
     print(f'patched #{idx} {pk.classname(ex)} ({ex["size"]} bytes, in place)')
 
-IS_PRESSED = 63; LEVEL_LOADED = 96; PLAYER_VAR = 188
+# Kismet objects in AirDribble_Challenge.upk
+PLAYER_VAR = 188          # SeqVar_Player (all players)
+CAR_SPAWNED = 95          # SeqEvent_CarSpawned_TA -> fires the "Reset" remote event
+RESET_EVENTS = (97, 98, 99)  # SeqEvent_RemoteEvent "Reset" (99 resets the timer)
+RESET_DELAY = 53          # SeqAct_Delay before DestroyAll + Add ball
+TELEPORT_CAR = 82         # SeqAct_Teleport: players -> PlayerStart_TA_0 (map start)
 
-# 1) LevelLoaded also starts the orphaned "ResetTraining pressed" watcher (#63), input 0 = Check
-def fix_levelloaded(nodes):
-    ol = Tree.get(nodes, 'OutputLinks')
-    links = Tree.get(ol['items'][0], 'Links')
-    new = copy.deepcopy(links['items'][0])
-    Tree.get(new, 'LinkedOp')['raw'] = struct.pack('<i', IS_PRESSED)
-    ili = Tree.get(new, 'InputLinkIdx')
-    if ili is not None:
-        ili['raw'] = struct.pack('<i', 0)
-    links['items'].append(new)
-write_export(LEVEL_LOADED, fix_levelloaded, 'fix: start reset watcher')
-
-# 2) Watcher "True" output re-checks after 0.1s instead of instantly (no same-frame loop while held)
-def fix_watcher(nodes):
-    ol = Tree.get(nodes, 'OutputLinks')
-    true_out = ol['items'][0]
-    assert Tree.get(true_out, 'LinkDesc')['raw'][4:-1] == b'True'
-    ad = Tree.get(true_out, 'ActivateDelay')
-    ad['raw'] = struct.pack('<f', 0.1)
-write_export(IS_PRESSED, fix_watcher, 'fix: debounce')
-
-# 3) Final-time and best-time DrawText get the same player Target as the live timer
-def fix_drawtext(nodes):
-    vl = Tree.get(nodes, 'VariableLinks')
-    tgt = vl['items'][0]
-    assert Tree.get(tgt, 'LinkDesc')['raw'][4:-1] == b'Target'
-    lv = Tree.get(tgt, 'LinkedVariables')
-    cnt = struct.unpack_from('<i', lv['raw'])[0]
-    if cnt == 0:
-        lv['raw'] = struct.pack('<ii', 1, PLAYER_VAR)
-for i in (60, 61):
-    write_export(i, fix_drawtext, 'fix: target player')
-
-# 4) Events default to MaxTriggerCount=1 (fire once). The map never set it on the reset events,
-#    so after the first reset its own reset logic stopped running. Make them fire every time.
 def make_int(name, value):
     return dict(nb=t.name_bytes(name), tb=t.name_bytes('IntProperty'), name=name, type='IntProperty',
                 idx=0, raw=struct.pack('<i', value))
 
-def fix_trigger_count(nodes):
+def fire_every_time(nodes):
+    """Kismet events default to MaxTriggerCount=1 (fire once). The map never set it on its reset events,
+    so after the first reset its own reset logic stopped running."""
     n = Tree.get(nodes, 'MaxTriggerCount')
     if n is not None:
         n['raw'] = struct.pack('<i', 0)
     else:
         nodes.insert(0, make_int('MaxTriggerCount', 0))
-CAR_SPAWNED = 95
-RESET_EVENTS = (97, 98, 99)
-for i in (CAR_SPAWNED,) + RESET_EVENTS:
-    write_export(i, fix_trigger_count, '')
-
-# 5) Re-spawn the ball 0.3s after a reset (was 0.1s) so it lands after the game's own reset
-RESET_DELAY = 53
-def fix_reset_delay(nodes):
-    Tree.get(nodes, 'Duration')['raw'] = struct.pack('<f', 0.3)
-
-# 6) On every reset, also teleport the car to the map's start (the map's existing Teleport action,
-#    otherwise only used when you hit the walls). Freeplay resets were spawning the car somewhere
-#    else every other time, far from the ball. Done right away and again with the ball re-spawn.
-TELEPORT_CAR = 82
-RESET_TIMER_EVENT = 99
 
 def add_link(nodes, output_index, target_op, input_index=0):
     ol = Tree.get(nodes, 'OutputLinks')
     links = Tree.get(ol['items'][output_index], 'Links')
-    if 'items' not in links:
-        raise RuntimeError('output has no links to copy from')
     new = copy.deepcopy(links['items'][0])
     Tree.get(new, 'LinkedOp')['raw'] = struct.pack('<i', target_op)
     ili = Tree.get(new, 'InputLinkIdx')
@@ -124,15 +79,29 @@ def add_link(nodes, output_index, target_op, input_index=0):
         ili['raw'] = struct.pack('<i', input_index)
     links['items'].append(new)
 
-def fix_delay_and_teleport(nodes):
-    fix_reset_delay(nodes)
+# 1) One reset per reset: when the car spawns, the reset logic runs (every time) and the car is put on the
+#    map's start in the same moment, so freeplay's alternating spawn spot never shows.
+def fix_car_spawned(nodes):
+    fire_every_time(nodes)
     add_link(nodes, 0, TELEPORT_CAR)
-write_export(RESET_DELAY, fix_delay_and_teleport, 'fix: respawn + car')
+write_export(CAR_SPAWNED, fix_car_spawned, '')
 
-def fix_reset_event_and_teleport(nodes):
-    fix_trigger_count(nodes)          # write_export always starts from the original bytes,
-    add_link(nodes, 0, TELEPORT_CAR)  # so #99 gets both of its fixes in one pass
-write_export(RESET_TIMER_EVENT, fix_reset_event_and_teleport, '')
+# 2) The "Reset" remote events must fire on every reset too.
+for i in RESET_EVENTS:
+    write_export(i, fire_every_time, '')
+
+# 3) Final-time and best-time texts get the same player Target as the live timer.
+def fix_drawtext(nodes):
+    vl = Tree.get(nodes, 'VariableLinks')
+    tgt = vl['items'][0]
+    assert Tree.get(tgt, 'LinkDesc')['raw'][4:-1] == b'Target'
+    lv = Tree.get(tgt, 'LinkedVariables')
+    if struct.unpack_from('<i', lv['raw'])[0] == 0:
+        lv['raw'] = struct.pack('<ii', 1, PLAYER_VAR)
+for i in (60, 61):
+    write_export(i, fix_drawtext, 'fix: target player')
+
+# The ball re-spawn delay (0.1s) and everything else stay as the map's author made them.
 
 open(dst, 'wb').write(out)
 print('wrote', dst, len(out), 'bytes (original', len(pk.d), ')')
