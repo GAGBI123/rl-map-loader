@@ -10,3 +10,6 @@ __pycache__/
 # never commit game/map packages
 *.upk
 *.udk
+linux/publish/
+linux/rl-map-loader
+rl-map-loader-linux-x64.tar.gz

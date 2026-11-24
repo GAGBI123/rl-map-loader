@@ -112,13 +112,15 @@ namespace RLMapLoader.Services
             }
         }
 
-        public static string TargetPath(string cooked) => Path.Combine(cooked, TargetName);
+        public static string TargetPath(string cooked) => PathUtil.FindChild(cooked, TargetName) ?? Path.Combine(cooked, TargetName);
+
+        public static string BakPath(string cooked) => PathUtil.FindChild(cooked, TargetName + ".bak") ?? TargetPath(cooked) + ".bak";
 
         public static SwapStatus GetStatus(string? cooked)
         {
             if (!RlLocator.IsValidCooked(cooked)) return new SwapStatus(UnderpassState.NotConfigured);
-            var target = Path.Combine(cooked!, TargetName);
-            var bak = target + ".bak";
+            var target = TargetPath(cooked!);
+            var bak = BakPath(cooked!);
             TryEnsureSafetyCopy(bak);
             if (!File.Exists(target)) return new SwapStatus(UnderpassState.Missing);
             if (IsOriginalPackage(target))
@@ -131,7 +133,7 @@ namespace RLMapLoader.Services
 
         public static bool HasAnyBackup(string cooked)
         {
-            var bak = Path.Combine(cooked, TargetName + ".bak");
+            var bak = BakPath(cooked);
             return (File.Exists(bak) && IsOriginalPackage(bak)) || (File.Exists(SafetyPath) && IsOriginalPackage(SafetyPath));
         }
 
@@ -155,8 +157,8 @@ namespace RLMapLoader.Services
 
         public static async Task LoadAsync(string cooked, string mapPath, IProgress<double>? progress, CancellationToken ct = default)
         {
-            var target = Path.Combine(cooked, TargetName);
-            var bak = target + ".bak";
+            var target = TargetPath(cooked);
+            var bak = BakPath(cooked!);
             var tmp = target + ".rlml-tmp";
 
             if (!File.Exists(mapPath))
@@ -226,8 +228,8 @@ namespace RLMapLoader.Services
 
         public static Task RestoreAsync(string cooked) => Task.Run(() =>
         {
-            var target = Path.Combine(cooked, TargetName);
-            var bak = target + ".bak";
+            var target = TargetPath(cooked);
+            var bak = BakPath(cooked!);
             try
             {
                 if (File.Exists(target) && IsOriginalPackage(target)) return;

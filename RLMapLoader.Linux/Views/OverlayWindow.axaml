@@ -1,0 +1,114 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="RLMapLoader.Linux.Views.OverlayWindow"
+        Title="RL Map Loader – Overlay" Width="420" Height="600"
+        SystemDecorations="None" Background="Transparent" TransparencyLevelHint="Transparent"
+        Topmost="True" ShowInTaskbar="False" CanResize="False" ShowActivated="True"
+        Foreground="{StaticResource Text}" Icon="/Assets/logo.png">
+
+    <Border Margin="14" CornerRadius="18" Background="#F50C111B" BorderBrush="#2EFFFFFF" BorderThickness="1"
+            BoxShadow="0 6 24 0 #73000000" ClipToBounds="True">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+            <Border Grid.Row="0" Height="3" VerticalAlignment="Top" Background="{StaticResource TeamLine}"/>
+
+            <!-- header (drag to move) -->
+            <Grid Grid.Row="0" Margin="16,14,10,0" Background="Transparent" PointerPressed="Header_PointerPressed"
+                  Cursor="SizeAll" ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                    <Image Source="/Assets/logo.png" Width="22" Height="22"/>
+                    <TextBlock Text="Map Loader" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                    <Border Background="{StaticResource Surface3}" CornerRadius="5" Padding="7,2" VerticalAlignment="Center"
+                            Margin="0,0,4,0" ToolTip.Tip="Press again to hide">
+                        <TextBlock Text="{Binding HotkeyText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
+                    </Border>
+                    <Button Classes="ghost icon" Width="32" Height="32" ToolTip.Tip="Open the full app" Click="OpenMain_Click">
+                        <PathIcon Data="{StaticResource IconOpen}" Width="13" Height="13"/>
+                    </Button>
+                    <Button Classes="ghost icon" Width="32" Height="32" ToolTip.Tip="Close (Esc)" Click="Close_Click">
+                        <PathIcon Data="{StaticResource IconClose}" Width="11" Height="11"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- status -->
+            <Border Grid.Row="1" Margin="16,12,16,0" CornerRadius="10" Padding="11,8" Background="{StaticResource Surface2}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Fill="{StaticResource Muted}" IsVisible="{Binding !IsCustomActive}"/>
+                        <Ellipse Width="8" Height="8" Fill="{StaticResource Green}" IsVisible="{Binding IsCustomActive}"/>
+                        <TextBlock Text="{Binding StatusShort}" FontSize="12.5" TextTrimming="CharacterEllipsis" MaxWidth="230"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="ghost" Padding="8,3" FontSize="12" Foreground="#FFB4B4"
+                            Command="{Binding RestoreCommand}" Content="Restore" IsVisible="{Binding IsCustomActive}"/>
+                </Grid>
+            </Border>
+
+            <!-- search -->
+            <Panel Grid.Row="2" Margin="16,10,16,6">
+                <TextBox Name="Search" Classes="search" Watermark="Type to search…" Text="{Binding OverlaySearchText}"/>
+                <PathIcon Data="{StaticResource IconSearch}" Foreground="{StaticResource Muted}" Width="14" Height="14"
+                          HorizontalAlignment="Left" Margin="13,0,0,0" IsHitTestVisible="False"/>
+            </Panel>
+
+            <!-- list -->
+            <ListBox Name="List" Grid.Row="3" Classes="plain" Margin="10,2,6,0"
+                     ItemsSource="{Binding OverlayMaps}" SelectedItem="{Binding OverlaySelected}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border Classes="row">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Width="96" Height="54" CornerRadius="7" ClipToBounds="True" Background="{Binding PlaceholderBrush}">
+                                    <Panel>
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="10" FontWeight="Bold" Foreground="#F7FFFFFF"
+                                                   TextWrapping="Wrap" TextAlignment="Center" TextTrimming="CharacterEllipsis" MaxHeight="44"
+                                                   Margin="5,0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" IsVisible="{Binding HasThumbnail}"/>
+                                    </Panel>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <PathIcon Data="{StaticResource IconStar}" Width="10" Height="10" Foreground="{StaticResource Orange}"
+                                                  IsVisible="{Binding IsFavorite}"/>
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="13.5" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="210"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{StaticResource Muted}" Margin="0,3,0,0"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="220" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                                <Border Grid.Column="2" Width="22" Height="22" CornerRadius="11" Background="{StaticResource Green}"
+                                        VerticalAlignment="Center" IsVisible="{Binding IsActive}" ToolTip.Tip="Loaded in Underpass">
+                                    <PathIcon Data="{StaticResource IconCheck}" Width="11" Height="11" Foreground="White"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource Muted}"
+                       TextAlignment="Center" Margin="24" TextWrapping="Wrap" IsVisible="{Binding OverlayEmpty}"
+                       Text="No maps match. Set up your folders in the full app (button at the top right)."/>
+
+            <!-- footer -->
+            <StackPanel Grid.Row="4" Margin="16,8,16,14">
+                <StackPanel IsVisible="{Binding IsBusy}" Margin="0,0,0,10">
+                    <TextBlock Text="{Binding BusyText}" FontSize="12" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
+                    <ProgressBar Classes="slim" Value="{Binding Progress}" Margin="0,6,0,0"/>
+                </StackPanel>
+                <Border Name="Flash" CornerRadius="9" Padding="10,7" Margin="0,0,0,10" IsVisible="False" Background="{StaticResource GreenSoft}">
+                    <TextBlock Name="FlashText" FontSize="12.5" TextWrapping="Wrap"/>
+                </Border>
+                <Button Name="LoadButton" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Padding="16,11" Click="LoadButton_Click" IsEnabled="{Binding !IsBusy}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <PathIcon Data="{StaticResource IconPlay}" Foreground="White" Width="13" Height="13"/>
+                        <TextBlock Text="Load selected map"/>
+                    </StackPanel>
+                </Button>
+                <TextBlock Margin="0,9,0,0" HorizontalAlignment="Center" FontSize="11.5" Foreground="#6B7690"
+                           Text="↑ ↓ pick  ·  Enter load  ·  Esc close  ·  then Free Play → Underpass"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -1,0 +1,345 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="RLMapLoader.Linux.Views.MainWindow"
+        Title="RL Map Loader" Width="1200" Height="800" MinWidth="860" MinHeight="580"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Text}"
+        WindowStartupLocation="CenterScreen" Icon="/Assets/logo.png"
+        DragDrop.AllowDrop="True">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+        <!-- ===================== header ===================== -->
+        <Border Grid.Row="0" Height="2" VerticalAlignment="Top" Background="{StaticResource TeamLine}"/>
+        <Grid Grid.Row="0" Margin="24,14,16,4" ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="11" VerticalAlignment="Center">
+                <Image Source="/Assets/logo.png" Width="28" Height="28"/>
+                <TextBlock Text="RL Map Loader" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                <Button Classes="ghost" Click="OverlayButton_Click"
+                        ToolTip.Tip="Show the in-game overlay">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <PathIcon Data="{StaticResource IconKeyboard}" Foreground="{StaticResource Muted}"/>
+                        <TextBlock Text="Overlay" Foreground="{StaticResource Muted}" FontWeight="Normal" VerticalAlignment="Center"/>
+                        <Border Background="{StaticResource Surface3}" CornerRadius="5" Padding="7,2">
+                            <TextBlock Text="{Binding HotkeyText}" FontSize="11.5" FontWeight="SemiBold"/>
+                        </Border>
+                    </StackPanel>
+                </Button>
+                <Button Classes="ghost icon" Command="{Binding ToggleSettingsCommand}" ToolTip.Tip="Settings">
+                    <PathIcon Data="{StaticResource IconCog}" Width="17" Height="17" Foreground="{StaticResource Muted}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ===================== hero ===================== -->
+        <Border Grid.Row="1" Margin="24,8,24,0" CornerRadius="18" Background="{StaticResource HeroGradient}"
+                BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="18">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Border Width="200" Height="112" CornerRadius="11" ClipToBounds="True" Background="{StaticResource Surface3}">
+                    <Panel>
+                        <Image Source="/Assets/logo.png" Width="58" Height="58" Opacity="0.85" IsVisible="{Binding !HasActiveMap}"/>
+                        <Panel IsVisible="{Binding HasActiveMap}" Background="{Binding ActiveMap.PlaceholderBrush}">
+                            <TextBlock Text="{Binding ActiveMap.DisplayName}" FontSize="18" FontWeight="Bold" Foreground="#F7FFFFFF"
+                                       TextWrapping="Wrap" TextAlignment="Center" Margin="14,0"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Image Source="{Binding ActiveMap.Thumbnail}" Stretch="UniformToFill"
+                                   IsVisible="{Binding ActiveMap.HasThumbnail}"/>
+                        </Panel>
+                    </Panel>
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="22,2,12,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                 Fill="{StaticResource Muted}" IsVisible="{Binding !IsCustomActive}"/>
+                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                 Fill="{StaticResource Green}" IsVisible="{Binding IsCustomActive}"/>
+                        <TextBlock Classes="label" Text="{Binding HeroLabel}"/>
+                    </StackPanel>
+                    <TextBlock Classes="h1" Text="{Binding HeroTitle}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Classes="body" Text="{Binding HeroSubtitle}" Margin="0,5,0,0"/>
+                    <StackPanel Margin="0,12,0,0" IsVisible="{Binding IsBusy}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding ProgressText}" FontSize="12" Foreground="{StaticResource Muted}"/>
+                            <TextBlock Text="{Binding BusyText}" FontSize="12"/>
+                        </DockPanel>
+                        <ProgressBar Classes="slim" Value="{Binding Progress}" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="8">
+                    <Button Classes="danger" Command="{Binding RestoreCommand}" IsVisible="{Binding IsCustomActive}"
+                            ToolTip.Tip="Put the original Labs_Underpass_P.upk back (do this before playing online)">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PathIcon Data="{StaticResource IconUndo}" Foreground="#FFB4B4"/>
+                            <TextBlock Text="Restore original"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="ghost" HorizontalAlignment="Right" Command="{Binding OpenCookedFolderCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PathIcon Data="{StaticResource IconFolder}" Foreground="{StaticResource Muted}"/>
+                            <TextBlock Text="Game folder" FontWeight="Normal" Foreground="{StaticResource Muted}"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== toolbar ===================== -->
+        <Grid Grid.Row="2" Margin="24,18,24,4" ColumnDefinitions="300,Auto,*,Auto">
+            <Panel>
+                <TextBox Name="SearchBox" Classes="search" Watermark="Search maps…  (Ctrl+F)"
+                         Text="{Binding SearchText}"/>
+                <PathIcon Data="{StaticResource IconSearch}" Foreground="{StaticResource Muted}" Width="14" Height="14"
+                          HorizontalAlignment="Left" Margin="13,0,0,0" IsHitTestVisible="False"/>
+            </Panel>
+            <Border Grid.Column="1" Margin="14,0,0,0" Background="{StaticResource Surface}" CornerRadius="9" Padding="3"
+                    BorderBrush="{StaticResource Line}" BorderThickness="1" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton Classes="pill" GroupName="sort" Content="A–Z" IsChecked="{Binding SortIsName}"/>
+                    <RadioButton Classes="pill" GroupName="sort" Content="Newest" IsChecked="{Binding SortIsNewest}"/>
+                    <RadioButton Classes="pill" GroupName="sort" Content="Largest" IsChecked="{Binding SortIsSize}"/>
+                </StackPanel>
+            </Border>
+            <TextBlock Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="12.5">
+                <Run Text="{Binding MapCount}"/><Run Text=" maps"/>
+            </TextBlock>
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8">
+                <Button Classes="icon" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh">
+                    <PathIcon Data="{StaticResource IconRefresh}"/>
+                </Button>
+                <Button Classes="icon" Command="{Binding OpenMapsFolderCommand}" ToolTip.Tip="Open maps folder">
+                    <PathIcon Data="{StaticResource IconFolder}"/>
+                </Button>
+                <Button Classes="primary" Command="{Binding AddMapsCommand}" Margin="2,0,0,0"
+                        ToolTip.Tip="Add .upk / .udk / .zip maps to your maps folder">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <PathIcon Data="{StaticResource IconPlus}" Foreground="White"/>
+                        <TextBlock Text="Add maps"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ===================== gallery ===================== -->
+        <ListBox Name="Gallery" Grid.Row="3" Classes="plain" Margin="15,6,6,6"
+                 ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Margin="0,0,0,24"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Border Classes="card" Classes.active="{Binding IsActive}">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Load map" Command="{Binding Owner.LoadCommand}" CommandParameter="{Binding}"/>
+                                <MenuItem Header="Favorite / unfavorite" Command="{Binding Owner.ToggleFavoriteCommand}" CommandParameter="{Binding}"/>
+                                <Separator/>
+                                <MenuItem Header="Choose image…" Command="{Binding Owner.SetImageCommand}" CommandParameter="{Binding}"/>
+                                <MenuItem Header="Reset image" Command="{Binding Owner.ClearImageCommand}" CommandParameter="{Binding}"
+                                          IsEnabled="{Binding HasCustomImage}"/>
+                                <Separator/>
+                                <MenuItem Header="Open containing folder" Command="{Binding Owner.ShowInFolderCommand}" CommandParameter="{Binding}"/>
+                            </ContextMenu>
+                        </Border.ContextMenu>
+                        <StackPanel>
+                            <Border Height="133" CornerRadius="9" ClipToBounds="True" Background="{Binding PlaceholderBrush}">
+                                <Panel>
+                                    <TextBlock Text="{Binding DisplayName}" FontSize="21" FontWeight="Bold" Foreground="#F7FFFFFF"
+                                               TextWrapping="Wrap" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               MaxHeight="100" LineHeight="25" Margin="16,0"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" IsVisible="{Binding HasThumbnail}"/>
+
+                                    <Border Classes="hoverLayer" Background="#A6060A12">
+                                        <Button Classes="primary" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                Command="{Binding Owner.LoadCommand}" CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <PathIcon Data="{StaticResource IconPlay}" Foreground="White" Width="13" Height="13"/>
+                                                <TextBlock Text="Load map"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Border>
+
+                                    <Border Classes="badge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8">
+                                        <TextBlock Text="{Binding Extension}" FontSize="10" FontWeight="Bold" Foreground="#B8C2D6"/>
+                                    </Border>
+                                    <Border Classes="badge" Background="{StaticResource Green}" HorizontalAlignment="Right"
+                                            VerticalAlignment="Top" Margin="8" IsVisible="{Binding IsActive}">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <PathIcon Data="{StaticResource IconCheck}" Foreground="White" Width="10" Height="10"/>
+                                            <TextBlock Text="LOADED" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Button Classes="star" Classes.on="{Binding IsFavorite}" HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom" Margin="7" ToolTip.Tip="Favorite"
+                                            Command="{Binding Owner.ToggleFavoriteCommand}" CommandParameter="{Binding}">
+                                        <PathIcon Data="{StaticResource IconStar}"/>
+                                    </Button>
+                                </Panel>
+                            </Border>
+                            <TextBlock Text="{Binding DisplayName}" FontSize="14.5" FontWeight="SemiBold" Margin="4,11,4,0"
+                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Tooltip}"/>
+                            <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{StaticResource Muted}" Margin="4,3,4,3"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- empty state -->
+        <StackPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420"
+                    IsVisible="{Binding HasNoMaps}">
+            <Border Width="84" Height="84" CornerRadius="24" Background="{StaticResource Surface2}" HorizontalAlignment="Center">
+                <PathIcon Data="{StaticResource IconMap}" Width="34" Height="34" Foreground="{StaticResource BlueLight}"/>
+            </Border>
+            <TextBlock Text="{Binding EmptyTitle}" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,0"/>
+            <TextBlock Classes="body" Text="{Binding EmptyText}" TextAlignment="Center" Margin="0,8,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+                <Button Classes="primary" Content="Open settings" Command="{Binding ToggleSettingsCommand}" IsVisible="{Binding IsNotConfigured}"/>
+                <Button Classes="primary" Content="Add maps" Command="{Binding AddMapsCommand}" IsVisible="{Binding IsConfigured}"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- drop hint -->
+        <Border Name="DropHint" Grid.Row="1" Grid.RowSpan="3" Margin="16" CornerRadius="18" Background="#D90A0D14"
+                BorderBrush="{StaticResource Blue}" BorderThickness="2" IsVisible="False" IsHitTestVisible="False">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <PathIcon Data="{StaticResource IconPlus}" Width="44" Height="44" Foreground="{StaticResource BlueLight}"/>
+                <TextBlock Name="DropHintText" Text="Drop to add maps" FontSize="20" FontWeight="SemiBold" Margin="0,14,0,0"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text=".upk  ·  .udk  ·  .zip   —   or drop an image on a map card to use it as its picture"
+                           Foreground="{StaticResource Muted}" Margin="0,6,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- toast -->
+        <Border Name="Toast" Classes="toast" Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,26"
+                CornerRadius="12" Padding="16,11" Background="{StaticResource Surface3}" BorderBrush="{StaticResource Line}"
+                BorderThickness="1" BoxShadow="0 6 24 0 #73000000" IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <PathIcon Name="ToastIcon" Data="{StaticResource IconInfo}" Width="16" Height="16"/>
+                <TextBlock Name="ToastText" FontSize="13.5" VerticalAlignment="Center" MaxWidth="640" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ===================== settings drawer ===================== -->
+        <Panel Grid.Row="0" Grid.RowSpan="4" IsVisible="{Binding SettingsOpen}" Name="SettingsBackdrop">
+            <Border Background="#A0000000" PointerPressed="SettingsBackdrop_PointerPressed"/>
+        </Panel>
+        <Border Grid.Row="0" Grid.RowSpan="4" Classes="drawer" Classes.open="{Binding SettingsOpen}"
+                Width="460" HorizontalAlignment="Right" Background="{StaticResource Surface}"
+                BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="24,20,16,8" ColumnDefinitions="*,Auto">
+                    <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Classes="ghost icon" Command="{Binding ToggleSettingsCommand}">
+                        <PathIcon Data="{StaticResource IconClose}" Width="13" Height="13"/>
+                    </Button>
+                </Grid>
+                <ScrollViewer>
+                    <StackPanel Margin="24,4,24,28">
+                        <TextBlock Classes="label" Text="FOLDERS" Margin="0,8,0,12"/>
+
+                        <TextBlock Text="Rocket League maps folder" FontWeight="SemiBold"/>
+                        <TextBlock Classes="body" Text="rocketleague/TAGame/CookedPCConsole (Heroic, Steam/Proton, Lutris…)" FontSize="12" Margin="0,2,0,8"/>
+                        <TextBox Watermark="e.g. ~/Games/Heroic/rocketleague/TAGame/CookedPCConsole" Text="{Binding CookedPath, UpdateSourceTrigger=LostFocus}"
+ Name="CookedBox"/>
+                        <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <PathIcon Data="{StaticResource IconCheck}" Width="12" Height="12" Foreground="{StaticResource Green}" IsVisible="{Binding CookedValid}"/>
+                                <PathIcon Data="{StaticResource IconAlert}" Width="12" Height="12" Foreground="{StaticResource Orange}" IsVisible="{Binding !CookedValid}"/>
+                                <TextBlock Text="{Binding CookedHint}" FontSize="12" Foreground="{StaticResource Muted}" MaxWidth="200" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <Button Classes="ghost" Content="Auto-detect" Command="{Binding AutoDetectCommand}"/>
+                                <Button Content="Browse…" Padding="14,7" Command="{Binding BrowseCookedCommand}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="Custom maps folder" FontWeight="SemiBold" Margin="0,22,0,0"/>
+                        <TextBlock Classes="body" Text="Where your downloaded maps live (sub-folders are scanned too)" FontSize="12" Margin="0,2,0,8"/>
+                        <TextBox Watermark="e.g. ~/RL Maps" Text="{Binding MapsPath, UpdateSourceTrigger=LostFocus}" Name="MapsBox"/>
+                        <Grid Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <PathIcon Data="{StaticResource IconCheck}" Width="12" Height="12" Foreground="{StaticResource Green}" IsVisible="{Binding MapsValid}"/>
+                                <PathIcon Data="{StaticResource IconAlert}" Width="12" Height="12" Foreground="{StaticResource Orange}" IsVisible="{Binding !MapsValid}"/>
+                                <TextBlock Text="{Binding MapsHint}" FontSize="12" Foreground="{StaticResource Muted}" MaxWidth="260" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Browse…" Padding="14,7" Command="{Binding BrowseMapsCommand}"/>
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource Line}" Margin="0,26,0,0"/>
+                        <TextBlock Classes="label" Text="IN-GAME OVERLAY" Margin="0,22,0,12"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel>
+                                <TextBlock Text="Overlay hotkey" FontWeight="SemiBold"/>
+                                <TextBlock Classes="body" Text="Click, then press a key (combos like Ctrl+M work too)" FontSize="12" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <Button Name="HotkeyButton" Grid.Column="1" MinWidth="110" HorizontalContentAlignment="Center"
+                                    Content="{Binding HotkeyButtonText}" Click="HotkeyButton_Click" LostFocus="HotkeyButton_LostFocus"/>
+                        </Grid>
+                        <Border Margin="0,12,0,0" CornerRadius="9" Background="{StaticResource OrangeSoft}" Padding="12,9"
+                                IsVisible="{Binding HotkeyFailed}">
+                            <TextBlock Text="Couldn't grab that key (no X11/XWayland display, or another app owns it). Pick another key, or use the command below."
+                                       FontSize="12" Foreground="#FFC58F" TextWrapping="Wrap"/>
+                        </Border>
+                        <Border Margin="0,12,0,0" CornerRadius="9" Background="{StaticResource BlueSoft}" Padding="12,10">
+                            <StackPanel Spacing="8">
+                                <TextBlock FontSize="12" Foreground="#B9D3FF" TextWrapping="Wrap"
+                                           Text="The hotkey works while Rocket League (Proton/Wine) has focus. To use it anywhere on Wayland, bind this command to a shortcut in System Settings → Shortcuts:"/>
+                                <SelectableTextBlock Text="{Binding ToggleCommandLine}" FontFamily="monospace" FontSize="11.5"
+                                                     Foreground="{StaticResource Text}" TextWrapping="Wrap"/>
+                                <TextBlock FontSize="12" Foreground="#B9D3FF" TextWrapping="Wrap"
+                                           Text="Run the game in Borderless or Windowed mode so the overlay can show on top."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Height="1" Background="{StaticResource Line}" Margin="0,26,0,0"/>
+                        <TextBlock Classes="label" Text="BEHAVIOR" Margin="0,22,0,6"/>
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Restore original Underpass when I quit"/>
+                                <TextBlock Text="Keeps your game clean for online matches" FontSize="12" Foreground="{StaticResource Muted}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding RestoreOnExit}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Keep running in the tray when closed"/>
+                                <TextBlock Text="So the overlay hotkey keeps working" FontSize="12" Foreground="{StaticResource Muted}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                            <TextBlock Text="Start when I log in" VerticalAlignment="Center"/>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding StartWithWindows}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                            <TextBlock Text="Start minimized to the tray" VerticalAlignment="Center"/>
+                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding StartMinimized}"/>
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource Line}" Margin="0,26,0,0"/>
+                        <TextBlock Classes="label" Text="HELP" Margin="0,22,0,10"/>
+                        <TextBlock Text="How loading works" FontWeight="SemiBold"/>
+                        <TextBlock Classes="body" FontSize="12.5" Margin="0,4,0,0"
+                                   Text="Load copies your map over Labs_Underpass_P.upk. The original is kept next to it as Labs_Underpass_P.upk.bak plus a private safety copy. Restore puts it back. Then in Rocket League: Training → Free Play → Underpass."/>
+                        <TextBlock Text="A map looks pink?" FontWeight="SemiBold" Margin="0,14,0,0"/>
+                        <TextBlock Classes="body" FontSize="12.5" Margin="0,4,0,0"
+                                   Text="Some workshop maps use extra textures a normal install doesn't have. Get the 'workshop textures' pack the map's author recommends and copy its files into your CookedPCConsole folder."/>
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                            <Button Content="Open game folder" Padding="14,7" Command="{Binding OpenCookedFolderCommand}"/>
+                            <Button Classes="ghost" Content="Open logs" Command="{Binding OpenLogsCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="RL Map Loader 1.0 for Linux" FontSize="11.5" Foreground="#5E6880" Margin="0,26,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

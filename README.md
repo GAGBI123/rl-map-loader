@@ -35,6 +35,44 @@ overlay) and it's swapped into **Underpass** — then just start Free Play on Un
 4. In Rocket League: **Training → Free Play → Underpass**.
 5. **Restore original** before playing online.
 
+## Linux (CachyOS / Arch and other distros)
+
+`RLMapLoader.Linux` is the same app built with [Avalonia](https://avaloniaui.net/). It finds Rocket League
+installed through **Heroic** or **Legendary** (Epic), **Steam/Proton** (native or Flatpak), and **Lutris**/**Bottles**
+Wine prefixes, and handles Linux's case-sensitive file names.
+
+Install a prebuilt binary (self-contained, no .NET needed):
+
+```bash
+tar xzf rl-map-loader-linux-x64.tar.gz
+cd rl-map-loader && ./install.sh        # installs to ~/.local/bin + app menu entry
+```
+
+Or build from source (`sudo pacman -S dotnet-sdk-9.0`):
+
+```bash
+cd linux && ./build.sh && ./install.sh  # or: makepkg -si   (uses linux/PKGBUILD)
+```
+
+Overlay hotkey on Linux:
+
+- **F3** (configurable) is grabbed through X11. It works on X11 sessions, and on Wayland while an X11/XWayland
+  window has focus — which is the case for Rocket League under Proton/Wine.
+- To open the overlay from anywhere (e.g. KDE Plasma on Wayland), bind `rl-map-loader --toggle-overlay` to a key in
+  *System Settings → Shortcuts*. `rl-map-loader --restore` puts the original Underpass back.
+- Run the game in Borderless or Windowed mode so the overlay can show on top.
+
+## Project layout
+
+- `RLMapLoader.Core` — platform-neutral logic: settings, map library, Underpass swapping, install detection
+- `RLMapLoader` — Windows app (WPF)
+- `RLMapLoader.Linux` — Linux app (Avalonia)
+- `tests/SwapTest` — swap-logic test harness (Windows and Linux)
+- `linux/` — install scripts, desktop entry, PKGBUILD
+- `tools/airdribble-patch` — the Air Dribble Challenge map fix
+
+Icons in the Linux app are from Material Design Icons (Apache 2.0).
+
 ## Build
 
 ```powershell
@@ -60,7 +98,9 @@ and offset). `upk.py` reads uncompressed UDK (v868) packages, `kgraph.py` prints
 - links the final-time / best-time texts to the player like the live timer
 - sets `MaxTriggerCount = 0` on the *Car Spawned* and *Reset* remote events (Kismet events default to firing
   once, so the map's reset logic stopped after the first reset)
-- re-spawns the ball 0.4 s after a reset (was 0.1 s) so it lands after the game's own ball reset
+- re-spawns the ball 0.3 s after a reset (was 0.1 s) so it lands after the game's own reset
+- teleports the car to the map's start on every reset (right away and again with the ball re-spawn), using the
+  map's own Teleport action — freeplay resets were spawning the car away from the ball every other time
 
 ```powershell
 python patch_airdribble.py AirDribble_Challenge.upk AirDribble_Challenge_Fixed.upk

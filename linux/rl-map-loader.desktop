@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=RL Map Loader
+GenericName=Rocket League map loader
+Comment=Load Rocket League workshop maps into Underpass, with an in-game overlay
+Exec=rl-map-loader
+Icon=rl-map-loader
+Terminal=false
+Categories=Game;Utility;
+Keywords=rocket;league;workshop;map;underpass;
+StartupWMClass=rl-map-loader
+Actions=ToggleOverlay;Restore;
+
+[Desktop Action ToggleOverlay]
+Name=Show / hide overlay
+Exec=rl-map-loader --toggle-overlay
+
+[Desktop Action Restore]
+Name=Restore original Underpass
+Exec=rl-map-loader --restore

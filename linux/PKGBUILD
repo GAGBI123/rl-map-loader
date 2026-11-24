@@ -1,0 +1,26 @@
+# Maintainer: you
+# Builds RL Map Loader from this repository checkout:
+#   cd linux && makepkg -si
+pkgname=rl-map-loader
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Load Rocket League workshop maps into Underpass, with an in-game overlay"
+arch=('x86_64')
+license=('custom')
+depends=('libx11' 'libice' 'libsm' 'fontconfig' 'glibc' 'gcc-libs')
+makedepends=('dotnet-sdk-9.0')
+options=('!strip' '!debug')
+source=()
+
+build() {
+    cd "$startdir/.."
+    dotnet publish RLMapLoader.Linux/RLMapLoader.Linux.csproj -c Release -r linux-x64 \
+        --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+        -p:EnableCompressionInSingleFile=true -o "$srcdir/publish"
+}
+
+package() {
+    install -Dm755 "$srcdir/publish/rl-map-loader" "$pkgdir/usr/bin/rl-map-loader"
+    install -Dm644 "$startdir/rl-map-loader.desktop" "$pkgdir/usr/share/applications/rl-map-loader.desktop"
+    install -Dm644 "$startdir/rl-map-loader.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/rl-map-loader.png"
+}

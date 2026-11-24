@@ -101,11 +101,38 @@ RESET_EVENTS = (97, 98, 99)
 for i in (CAR_SPAWNED,) + RESET_EVENTS:
     write_export(i, fix_trigger_count, '')
 
-# 5) Re-spawn the ball 0.4s after a reset (was 0.1s) so it lands after the game's own ball reset
+# 5) Re-spawn the ball 0.3s after a reset (was 0.1s) so it lands after the game's own reset
 RESET_DELAY = 53
 def fix_reset_delay(nodes):
-    Tree.get(nodes, 'Duration')['raw'] = struct.pack('<f', 0.4)
-write_export(RESET_DELAY, fix_reset_delay, 'fix: later respawn')
+    Tree.get(nodes, 'Duration')['raw'] = struct.pack('<f', 0.3)
+
+# 6) On every reset, also teleport the car to the map's start (the map's existing Teleport action,
+#    otherwise only used when you hit the walls). Freeplay resets were spawning the car somewhere
+#    else every other time, far from the ball. Done right away and again with the ball re-spawn.
+TELEPORT_CAR = 82
+RESET_TIMER_EVENT = 99
+
+def add_link(nodes, output_index, target_op, input_index=0):
+    ol = Tree.get(nodes, 'OutputLinks')
+    links = Tree.get(ol['items'][output_index], 'Links')
+    if 'items' not in links:
+        raise RuntimeError('output has no links to copy from')
+    new = copy.deepcopy(links['items'][0])
+    Tree.get(new, 'LinkedOp')['raw'] = struct.pack('<i', target_op)
+    ili = Tree.get(new, 'InputLinkIdx')
+    if ili is not None:
+        ili['raw'] = struct.pack('<i', input_index)
+    links['items'].append(new)
+
+def fix_delay_and_teleport(nodes):
+    fix_reset_delay(nodes)
+    add_link(nodes, 0, TELEPORT_CAR)
+write_export(RESET_DELAY, fix_delay_and_teleport, 'fix: respawn + car')
+
+def fix_reset_event_and_teleport(nodes):
+    fix_trigger_count(nodes)          # write_export always starts from the original bytes,
+    add_link(nodes, 0, TELEPORT_CAR)  # so #99 gets both of its fixes in one pass
+write_export(RESET_TIMER_EVENT, fix_reset_event_and_teleport, '')
 
 open(dst, 'wb').write(out)
 print('wrote', dst, len(out), 'bytes (original', len(pk.d), ')')

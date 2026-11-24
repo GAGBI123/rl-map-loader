@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="RLMapLoader.Linux.Views.DialogWindow"
+        Title="RL Map Loader" Width="440" SizeToContent="Height"
+        SystemDecorations="None" Background="Transparent" TransparencyLevelHint="Transparent"
+        CanResize="False" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Foreground="{StaticResource Text}">
+    <Border Margin="16" CornerRadius="16" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+            BorderThickness="1" BoxShadow="0 6 24 0 #73000000" ClipToBounds="True">
+        <Panel>
+            <Border Height="3" VerticalAlignment="Top" Background="{StaticResource TeamLine}"/>
+            <StackPanel Margin="24,24,24,20" PointerPressed="Body_PointerPressed">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <PathIcon Name="IconPath" Data="{StaticResource IconAlert}" Width="18" Height="18" Foreground="{StaticResource Orange}"/>
+                    <TextBlock Name="TitleText" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Name="MessageText" Margin="0,12,0,0" FontSize="13.5" Foreground="#C3CBDA" TextWrapping="Wrap" LineHeight="20"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,22,0,0">
+                    <Button Name="SecondaryButton" Click="Secondary_Click" IsCancel="True"/>
+                    <Button Name="PrimaryButton" Classes="primary" Click="Primary_Click" IsDefault="True"/>
+                </StackPanel>
+            </StackPanel>
+        </Panel>
+    </Border>
+</Window>

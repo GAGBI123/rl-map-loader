@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-neutral logic shared by the Windows (WPF) and Linux (Avalonia) apps:
+       settings, map library scanning, Underpass swapping and Rocket League install detection. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>RLMapLoader.Services</RootNamespace>
+  </PropertyGroup>
+</Project>
