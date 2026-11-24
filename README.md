@@ -58,6 +58,9 @@ and offset). `upk.py` reads uncompressed UDK (v868) packages, `kgraph.py` prints
   the car (the map otherwise relied only on the *car spawned* event)
 - re-checks the watcher every 0.1 s instead of instantly (no same-frame loop while the button is held)
 - links the final-time / best-time texts to the player like the live timer
+- sets `MaxTriggerCount = 0` on the *Car Spawned* and *Reset* remote events (Kismet events default to firing
+  once, so the map's reset logic stopped after the first reset)
+- re-spawns the ball 0.4 s after a reset (was 0.1 s) so it lands after the game's own ball reset
 
 ```powershell
 python patch_airdribble.py AirDribble_Challenge.upk AirDribble_Challenge_Fixed.upk

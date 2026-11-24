@@ -84,5 +84,28 @@ def fix_drawtext(nodes):
 for i in (60, 61):
     write_export(i, fix_drawtext, 'fix: target player')
 
+# 4) Events default to MaxTriggerCount=1 (fire once). The map never set it on the reset events,
+#    so after the first reset its own reset logic stopped running. Make them fire every time.
+def make_int(name, value):
+    return dict(nb=t.name_bytes(name), tb=t.name_bytes('IntProperty'), name=name, type='IntProperty',
+                idx=0, raw=struct.pack('<i', value))
+
+def fix_trigger_count(nodes):
+    n = Tree.get(nodes, 'MaxTriggerCount')
+    if n is not None:
+        n['raw'] = struct.pack('<i', 0)
+    else:
+        nodes.insert(0, make_int('MaxTriggerCount', 0))
+CAR_SPAWNED = 95
+RESET_EVENTS = (97, 98, 99)
+for i in (CAR_SPAWNED,) + RESET_EVENTS:
+    write_export(i, fix_trigger_count, '')
+
+# 5) Re-spawn the ball 0.4s after a reset (was 0.1s) so it lands after the game's own ball reset
+RESET_DELAY = 53
+def fix_reset_delay(nodes):
+    Tree.get(nodes, 'Duration')['raw'] = struct.pack('<f', 0.4)
+write_export(RESET_DELAY, fix_reset_delay, 'fix: later respawn')
+
 open(dst, 'wb').write(out)
 print('wrote', dst, len(out), 'bytes (original', len(pk.d), ')')
