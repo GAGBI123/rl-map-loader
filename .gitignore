@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+*.log
+RLMapLoader-App/
+publish/
+__pycache__/
+*.pyc
+# never commit game/map packages
+*.upk
+*.udk
