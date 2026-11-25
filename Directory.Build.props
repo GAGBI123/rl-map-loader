@@ -2,7 +2,7 @@
   <!-- Shared by every project. Bump Version for each release (see docs/DEVELOPMENT.md): installed apps compare
        their own version with latest.json in the newest GitHub release and update themselves. -->
   <PropertyGroup>
-    <Version>1.1.4</Version>
+    <Version>1.1.5</Version>
     <Product>RL Map Loader</Product>
     <Company>GAGBI123</Company>
     <Copyright>Copyright (c) 2026 GAGBI123 - MIT License</Copyright>

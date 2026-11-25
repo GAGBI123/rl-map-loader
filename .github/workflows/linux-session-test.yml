@@ -10,8 +10,6 @@ on:
         description: Released version to compare with (tag)
         type: string
         default: v1.1.4
-  push:
-    branches: ['ci-linux-test']
 
 permissions:
   contents: read

@@ -7,6 +7,8 @@
 - `RLMapLoader.Linux` – Linux app ([Avalonia](https://avaloniaui.net/))
 - `tests/SwapTest` – swap-logic test harness (Windows and Linux)
 - `tests/UpdateTest` – self-update test harness
+- `tests/linux-session` – runs the Linux app in an X11 desktop session (update restart from the tray and from the
+  button, log out, SIGTERM); run it with *Linux session test* in the Actions tab
 - `linux/` – install scripts, desktop entry, PKGBUILD
 - `tools/airdribble-patch` – the Air Dribble Challenge map fix ([README](../tools/airdribble-patch/README.md))
 
