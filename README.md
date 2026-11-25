@@ -14,7 +14,9 @@ overlay) and it's swapped into **Underpass** — then just start Free Play on Un
 - **Map details** from the common download format (`MapFolder/map.udk + preview.jpg + info.json`): the folder
   name is used as the title, plus `author` and `desc`. A `MapName.json` next to a map works too.
 - **In-game overlay** (default **F3**, changeable): a small picker on top of the game. Type to search,
-  ↑/↓ to pick, Enter to load, Esc to close. Needs Rocket League in *Borderless* or *Windowed* display mode.
+  ↑/↓ to pick, Enter to load, Esc to close. On Windows it shows over Rocket League in *Borderless* or *Windowed*
+  display mode. Windows can't draw anything over exclusive *Fullscreen*, so in that mode the overlay minimizes the game
+  (like Alt+Tab) and brings it back when you close the overlay.
 - **Safe swapping**
   - The original `Labs_Underpass_P.upk` is kept as `Labs_Underpass_P.upk.bak` (same convention as other
     loaders, so they interoperate) plus a private safety copy in `%LOCALAPPDATA%\RLMapLoader\Backup`.
@@ -58,9 +60,14 @@ Overlay hotkey on Linux:
 
 - **F3** (configurable) is grabbed through X11. It works on X11 sessions, and on Wayland while an X11/XWayland
   window has focus — which is the case for Rocket League under Proton/Wine.
+- Over the game the overlay opens **without taking focus**, so the game isn't tabbed out. The overlay is an
+  override-redirect window (like a tooltip: the window manager never focuses it, and it's drawn above fullscreen
+  windows), and while it's open the keyboard is grabbed so typing, ↑/↓, Enter and Esc go to it. Wine ignores focus
+  changes caused by keyboard grabs, so Rocket League stays active. The grab ends when the overlay closes, and after
+  2 idle minutes at the latest.
 - To open the overlay from anywhere (e.g. KDE Plasma on Wayland), bind `rl-map-loader --toggle-overlay` to a key in
-  *System Settings → Shortcuts*. `rl-map-loader --restore` puts the original Underpass back.
-- Run the game in Borderless or Windowed mode so the overlay can show on top.
+  *System Settings → Shortcuts*. It also opens without taking focus when an X11/XWayland window (the game) is active.
+  `rl-map-loader --restore` puts the original Underpass back.
 
 ## Project layout
 

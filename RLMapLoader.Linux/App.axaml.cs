@@ -50,19 +50,22 @@ namespace RLMapLoader.Linux
             CurrentSettings = _settings;
             _vm = new MainViewModel(_settings);
             _main = new MainWindow(_vm);
-            _overlay = new OverlayWindow(_vm);
+            _overlay = new OverlayWindow(_vm, X11Hotkey.Available ? _hotkey : null);
 
             _vm.ShowErrorAsync = ShowErrorAsync;
             _vm.AskAsync = async (title, msg, primary, secondary) =>
             {
                 using (_overlay.SuppressAutoHide())
+                using (_overlay.PauseKeyboardGrab())
                     return await DialogWindow.ShowAsync(VisibleOwner(), title, msg, primary, secondary);
             };
             _vm.PickFolderAsync = t => _main.PickFolderAsync(t);
             _vm.PickMapFilesAsync = () => _main.PickMapFilesAsync();
             _vm.PickImageAsync = t => _main.PickImageAsync(t);
 
-            _hotkey.Pressed += () => Dispatcher.UIThread.Post(() => _overlay.Toggle());
+            // The hotkey arrived through X, so an X11 window (the game) has focus: open without taking it.
+            _hotkey.Pressed += () => Dispatcher.UIThread.Post(() => _overlay.Toggle(keepGameFocus: true));
+            _hotkey.GrabbedKey += key => Dispatcher.UIThread.Post(() => _overlay.HandleGrabbedKey(key));
             RegisterHotkey();
             _main.HotkeyCaptureStarted += () => _hotkey.Unregister();
             _main.HotkeyCaptureCancelled += RegisterHotkey;
@@ -74,7 +77,7 @@ namespace RLMapLoader.Linux
                 RegisterHotkey();
                 if (_vm.HotkeyOk) _vm.Toast($"Overlay hotkey set to {_vm.HotkeyText}", ToastKind.Success);
             };
-            _main.OverlayRequested += () => _overlay.Toggle();
+            _main.OverlayRequested += () => _overlay.Toggle(keepGameFocus: false);
             _main.QuitRequested += () => _ = QuitAsync();
             _overlay.OpenMainRequested += ShowMain;
 
@@ -89,7 +92,7 @@ namespace RLMapLoader.Linux
             Dispatcher.UIThread.Post(async () =>
             {
                 await _vm.RescanAsync();
-                if (StartWithOverlay) _overlay.ShowOverlay();
+                if (StartWithOverlay) _overlay.ShowOverlay(OtherX11WindowActive());
                 if (StartWithRestore) await _vm.RestoreAsync();
             });
             base.OnFrameworkInitializationCompleted();
@@ -99,10 +102,22 @@ namespace RLMapLoader.Linux
         {
             switch (cmd)
             {
-                case "toggle-overlay": _overlay.Toggle(); break;
+                case "toggle-overlay": _overlay.Toggle(OtherX11WindowActive()); break;
                 case "restore": _ = _vm.RestoreAsync(); break;
                 default: ShowMain(); break;
             }
+        }
+
+        /// <summary>
+        /// True when another program's X11 window is active (e.g. the game under Proton), so the overlay can open
+        /// without taking focus. False for native Wayland windows - the keyboard grab can't reach those, so the
+        /// overlay takes focus the normal way.
+        /// </summary>
+        private bool OtherX11WindowActive()
+        {
+            if (!X11Hotkey.Available) return false;
+            var active = _hotkey.GetActiveWindow();
+            return active != IntPtr.Zero && active != _overlay.XWindow && active != (_main.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
         }
 
         private void RegisterHotkey()
@@ -115,11 +130,14 @@ namespace RLMapLoader.Linux
             if (_trayOverlayItem != null) _trayOverlayItem.Header = $"Show overlay ({_vm.HotkeyText})";
         }
 
-        private Window? VisibleOwner() => _overlay.IsVisible ? _overlay : _main.IsVisible ? _main : null;
+        // The overlay is an unmanaged window while it keeps the game focused; dialogs then stand on their own.
+        private Window? VisibleOwner() =>
+            _overlay.IsVisible && !_overlay.IsKeepingGameFocus ? _overlay : _main.IsVisible ? _main : null;
 
         private async Task ShowErrorAsync(UserFacingException ex)
         {
             using (_overlay.SuppressAutoHide())
+            using (_overlay.PauseKeyboardGrab())
             {
                 var msg = ex.NeedsAdmin
                     ? "Linux blocked writing to the Rocket League folder. Make sure your user owns it (for example: chown -R $USER on the game folder), then try again."

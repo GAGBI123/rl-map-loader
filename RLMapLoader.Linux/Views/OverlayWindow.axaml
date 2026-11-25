@@ -13,6 +13,7 @@
 
             <!-- header (drag to move) -->
             <Grid Grid.Row="0" Margin="16,14,10,0" Background="Transparent" PointerPressed="Header_PointerPressed"
+                  PointerMoved="Header_PointerMoved" PointerReleased="Header_PointerReleased"
                   Cursor="SizeAll" ColumnDefinitions="*,Auto">
                 <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
                     <Image Source="/Assets/logo.png" Width="22" Height="22"/>

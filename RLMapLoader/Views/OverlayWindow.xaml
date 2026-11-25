@@ -135,6 +135,13 @@
                     <TextBlock Text="{Binding BusyText}" FontSize="12" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
                     <ProgressBar Style="{StaticResource SlimProgress}" Value="{Binding Progress}" Margin="0,6,0,0"/>
                 </StackPanel>
+                <Border x:Name="FullscreenHint" CornerRadius="9" Padding="10,7" Margin="0,0,0,10" Visibility="Collapsed"
+                        Background="{StaticResource OrangeSoft}">
+                    <TextBlock FontSize="12" Foreground="#FFC58F" TextWrapping="Wrap" LineHeight="17">
+                        Rocket League is in <Bold>Fullscreen</Bold> mode, so it was minimized to show this and comes back when you
+                        close it. Set <Bold>Settings → Video → Display Mode → Borderless</Bold> to pick maps on top of the game.
+                    </TextBlock>
+                </Border>
                 <Border x:Name="Flash" CornerRadius="9" Padding="10,7" Margin="0,0,0,10" Opacity="0" Visibility="Collapsed"
                         Background="{StaticResource GreenSoft}">
                     <TextBlock x:Name="FlashText" FontSize="12.5" TextWrapping="Wrap"/>

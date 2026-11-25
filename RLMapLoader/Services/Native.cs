@@ -27,6 +27,13 @@ namespace RLMapLoader.Services
         [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
         [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
+        public const int SW_MINIMIZE = 6, SW_RESTORE = 9;
+        [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+
+        public const int QUNS_RUNNING_D3D_FULL_SCREEN = 3;
+        [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
+
         [DllImport("user32.dll")]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 

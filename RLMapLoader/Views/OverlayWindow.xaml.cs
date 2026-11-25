@@ -57,8 +57,12 @@ namespace RLMapLoader.Views
             else ShowOverlay();
         }
 
+        private bool _opening;
+        private IntPtr _minimizedGame; // Rocket League, minimized because it runs in exclusive Fullscreen
+
         public async void ShowOverlay()
         {
+            if (_opening) return;
             var fg = Native.GetForegroundWindow();
             var mine = new WindowInteropHelper(this).Handle;
             if (fg != mine) _previousForeground = fg;
@@ -66,6 +70,20 @@ namespace RLMapLoader.Views
             _vm.OverlaySearchText = "";
             _vm.OverlaySelected = _vm.ActiveMap ?? _vm.OverlayView.Cast<MapItem>().FirstOrDefault();
             Flash.Visibility = Visibility.Collapsed;
+
+            // Nothing can be drawn over exclusive Fullscreen (the overlay would open invisibly behind the game).
+            // Minimize the game like Alt+Tab does, and bring it back when the overlay closes.
+            bool fullscreenGame = fg != mine && !IsVisible && GameWindow.IsRocketLeague(fg) && GameWindow.IsExclusiveFullscreen();
+            FullscreenHint.Visibility = fullscreenGame ? Visibility.Visible : Visibility.Collapsed;
+            if (fullscreenGame)
+            {
+                Log.Write("Rocket League is in exclusive Fullscreen: minimizing it to show the overlay");
+                _minimizedGame = fg;
+                Native.ShowWindowAsync(fg, Native.SW_MINIMIZE);
+                _opening = true;
+                try { await Task.Delay(400); } // let the display switch back to the desktop
+                finally { _opening = false; }
+            }
 
             Opacity = 0;
             Show();
@@ -83,8 +101,11 @@ namespace RLMapLoader.Views
         {
             SaveUserPosition();
             Hide();
-            if (restoreFocus && _previousForeground != IntPtr.Zero && Native.IsWindow(_previousForeground))
-                Native.ForceForeground(_previousForeground);
+            var game = _minimizedGame;
+            _minimizedGame = IntPtr.Zero;
+            if (!restoreFocus || _previousForeground == IntPtr.Zero || !Native.IsWindow(_previousForeground)) return;
+            if (game == _previousForeground && Native.IsIconic(game)) Native.ShowWindowAsync(game, Native.SW_RESTORE);
+            Native.ForceForeground(_previousForeground);
         }
 
         // ------------------------------------------------------------ placement (in physical pixels)
