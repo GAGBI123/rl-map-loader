@@ -256,12 +256,11 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <Button Style="{StaticResource DangerButton}" Command="{Binding RestoreCommand}"
-                            Visibility="{Binding IsCustomActive, Converter={StaticResource BoolVis}}"
-                            ToolTip="Put the original Labs_Underpass_P.upk back (do this before playing online)">
+                    <Button Style="{StaticResource DangerButton}" Command="{Binding RestoreCommand}" ToolTipService.ShowOnDisabled="True"
+                            ToolTip="{Binding RestoreTooltip}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE777;" Margin="0,1,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Restore original"/>
+                            <TextBlock Text="Restore original Underpass"/>
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource GhostButton}" Margin="0,8,0,0" Command="{Binding OpenCookedFolderCommand}"

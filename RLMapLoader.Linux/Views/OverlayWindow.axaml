@@ -42,7 +42,8 @@
                         <TextBlock Text="{Binding StatusShort}" FontSize="12.5" TextTrimming="CharacterEllipsis" MaxWidth="230"/>
                     </StackPanel>
                     <Button Grid.Column="1" Classes="ghost" Padding="8,3" FontSize="12" Foreground="#FFB4B4"
-                            Command="{Binding RestoreCommand}" Content="Restore" IsVisible="{Binding IsCustomActive}"/>
+                            Command="{Binding RestoreCommand}" Content="Restore original"
+                            ToolTip.Tip="{Binding RestoreTooltip}" ToolTip.ShowOnDisabled="True"/>
                 </Grid>
             </Border>
 

@@ -102,12 +102,11 @@
                                 </Style>
                             </Ellipse.Style>
                         </Ellipse>
-                        <TextBlock Text="{Binding StatusShort}" FontSize="12.5" TextTrimming="CharacterEllipsis" MaxWidth="230"/>
+                        <TextBlock Text="{Binding StatusShort}" FontSize="12.5" TextTrimming="CharacterEllipsis" MaxWidth="200"/>
                     </StackPanel>
                     <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" Padding="8,3" FontSize="12"
-                            Foreground="#FFB4B4" Command="{Binding RestoreCommand}" Content="Restore"
-                            Visibility="{Binding IsCustomActive, Converter={StaticResource BoolVis}}"
-                            ToolTip="Put the original Underpass back"/>
+                            Foreground="#FFB4B4" Command="{Binding RestoreCommand}" Content="Restore original"
+                            ToolTipService.ShowOnDisabled="True" ToolTip="{Binding RestoreTooltip}"/>
                 </Grid>
             </Border>
 

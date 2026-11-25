@@ -76,11 +76,11 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="8">
-                    <Button Classes="danger" Command="{Binding RestoreCommand}" IsVisible="{Binding IsCustomActive}"
-                            ToolTip.Tip="Put the original Labs_Underpass_P.upk back (do this before playing online)">
+                    <Button Classes="danger" Command="{Binding RestoreCommand}"
+                            ToolTip.Tip="{Binding RestoreTooltip}" ToolTip.ShowOnDisabled="True">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <PathIcon Data="{StaticResource IconUndo}" Foreground="#FFB4B4"/>
-                            <TextBlock Text="Restore original"/>
+                            <TextBlock Text="Restore original Underpass"/>
                         </StackPanel>
                     </Button>
                     <Button Classes="ghost" HorizontalAlignment="Right" Command="{Binding OpenCookedFolderCommand}">

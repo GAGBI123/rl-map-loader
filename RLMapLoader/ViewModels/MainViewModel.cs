@@ -323,6 +323,7 @@ namespace RLMapLoader.ViewModels
             {
                 if (!Set(ref _state, value)) return;
                 OnPropertyChanged(nameof(IsCustomActive));
+                OnPropertyChanged(nameof(RestoreTooltip));
                 OnPropertyChanged(nameof(HeroTitle));
                 OnPropertyChanged(nameof(HeroSubtitle));
                 OnPropertyChanged(nameof(HeroLabel));
@@ -332,6 +333,10 @@ namespace RLMapLoader.ViewModels
         }
 
         public bool IsCustomActive => State == UnderpassState.Custom;
+
+        public string RestoreTooltip => State == UnderpassState.Custom
+            ? "Put the original Labs_Underpass_P.upk back (do this before playing online)"
+            : "The original Underpass is already in place";
 
         private MapItem? _activeMap;
         public MapItem? ActiveMap

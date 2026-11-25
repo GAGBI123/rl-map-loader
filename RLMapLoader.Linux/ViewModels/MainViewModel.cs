@@ -346,13 +346,17 @@ namespace RLMapLoader.Linux.ViewModels
             set
             {
                 if (!Set(ref _state, value)) return;
-                foreach (var p in new[] { nameof(IsCustomActive), nameof(HeroTitle), nameof(HeroSubtitle), nameof(HeroLabel), nameof(StatusShort) })
+                foreach (var p in new[] { nameof(IsCustomActive), nameof(HeroTitle), nameof(HeroSubtitle), nameof(HeroLabel), nameof(StatusShort), nameof(RestoreTooltip) })
                     OnPropertyChanged(p);
                 RefreshCommands();
             }
         }
 
         public bool IsCustomActive => State == UnderpassState.Custom;
+
+        public string RestoreTooltip => State == UnderpassState.Custom
+            ? "Put the original Labs_Underpass_P.upk back (do this before playing online)"
+            : "The original Underpass is already in place";
 
         private MapItem? _activeMap;
         public MapItem? ActiveMap
