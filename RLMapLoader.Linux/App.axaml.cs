@@ -105,7 +105,15 @@ namespace RLMapLoader.Linux
             // SIGTERM (e.g. the session being torn down, or "kill"): tidy up the same way, then let the process end.
             _sigterm = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, _ =>
             {
-                try { Dispatcher.UIThread.InvokeAsync(() => OnSessionEnding("SIGTERM")).Wait(TimeSpan.FromSeconds(5)); }
+                try
+                {
+                    Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (IsShuttingDown) return;
+                        OnSessionEnding("SIGTERM");
+                        _desktop.Shutdown();
+                    }).Wait(TimeSpan.FromSeconds(5));
+                }
                 catch { /* UI thread gone or busy: just end */ }
             });
 

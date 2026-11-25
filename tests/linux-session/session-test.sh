@@ -3,6 +3,7 @@
 #   tray    - an update (from a local feed) installs itself while the app is in the tray, and the app restarts into it
 #   button  - the same through the "Restart to update" button with the window open; the new window shows up
 #   logout  - logging out of the session isn't cancelled by the app, and the app quits
+#   sigterm - the app quits on SIGTERM
 # The session is Xvfb + xfce4-session, an XSMP session manager: KDE and GNOME ask X11 apps to quit the same way.
 # Used by .github/workflows/linux-session-test.yml (needs: xvfb xfce4-session xfwm4 dbus-x11 xdotool imagemagick python3-pil).
 #
@@ -186,6 +187,19 @@ if start_session; then
     else
         pass "$SCEN: logged out and the app quit"
     fi
+    stop_session
+fi
+
+# ------------------------------------------------------------ sigterm: e.g. the session being torn down
+SCEN=sigterm
+say "=== $SCEN"
+new_home false
+if start_session; then
+    start_app --tray
+    sleep 6
+    kill -TERM "$APP_PID"
+    for _ in $(seq 20); do alive "$APP_PID" || break; sleep 0.5; done
+    if alive "$APP_PID"; then fail "$SCEN: still running 10 s after SIGTERM"; else pass "$SCEN: quit on SIGTERM"; fi
     stop_session
 fi
 
