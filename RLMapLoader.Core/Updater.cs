@@ -419,6 +419,7 @@ namespace RLMapLoader.Services
         public string StatusText => State switch
         {
             UpdateState.Off => "Updates are off in development builds.",
+            UpdateState.Idle when !_settings.CheckForUpdates => "Automatic update checks are off. The app only goes online when you click Check for updates.",
             UpdateState.Idle => "Updates are checked automatically.",
             UpdateState.Checking => "Checking for updates…",
             UpdateState.UpToDate => $"You're up to date{CheckedSuffix}.",
@@ -443,7 +444,10 @@ namespace RLMapLoader.Services
                 RaiseChanged();
                 return;
             }
-            _checkTimer = new Timer(_ => _post(() => _ = CheckAsync(manual: false)), null, TimeSpan.FromSeconds(8), TimeSpan.FromHours(3));
+            _checkTimer = new Timer(_ => _post(() =>
+            {
+                if (_settings.CheckForUpdates) _ = CheckAsync(manual: false);
+            }), null, TimeSpan.FromSeconds(8), TimeSpan.FromHours(3));
             _idleTimer = new Timer(_ => _post(TryInstallWhenIdle), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
 
@@ -493,7 +497,7 @@ namespace RLMapLoader.Services
             Set(UpdateState.Available);
             if (isNew) Log.Write($"Update available: {info.DisplayVersion}");
 
-            if (_settings.AutoUpdate && CanSelfUpdate)
+            if (_settings.AutoUpdate && _settings.CheckForUpdates && CanSelfUpdate)
             {
                 await DownloadAsync();
             }
@@ -531,6 +535,14 @@ namespace RLMapLoader.Services
                     await DownloadAsync();
                     break;
             }
+        }
+
+        /// <summary>Call when the "check for updates" switch changes.</summary>
+        public void CheckForUpdatesChanged()
+        {
+            if (!_settings.CheckForUpdates && State is UpdateState.UpToDate) State = UpdateState.Idle;
+            RaiseChanged();
+            if (_settings.CheckForUpdates && State is UpdateState.Idle or UpdateState.UpToDate) _ = CheckAsync(manual: false);
         }
 
         /// <summary>Call when the automatic-updates switch changes.</summary>

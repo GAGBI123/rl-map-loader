@@ -50,12 +50,45 @@ Installed apps read `latest.json` from the newest release of this repo. It lists
 `windows-net9`, `linux-x64`) with its size and SHA-256; the app checks both before replacing itself, then restarts.
 Automatic updates install while the app is in the tray and Rocket League is closed, or when the app quits.
 
-To ship an update, bump `<Version>` in `Directory.Build.props`, then:
+Releases are built by GitHub Actions ([release.yml](../.github/workflows/release.yml)) from the code in this repo.
+To ship an update, bump `<Version>` in `Directory.Build.props`, commit, push, then tag it:
 
 ```powershell
-.\release.ps1 -Notes "What changed" -Publish
+git tag -a v1.2.0 -m "What changed"
+git push origin v1.2.0
 ```
 
-It builds all downloads into `release\<version>`, writes `latest.json` and creates the GitHub release with `gh`.
+The workflow builds the downloads, signs the Windows ones (once SignPath is set up), writes `latest.json`
+([tools/write_feed.py](../tools/write_feed.py)) and publishes the release; the tag's message becomes the release notes.
+*Run workflow* in the Actions tab with *publish* off makes a test build whose files are kept as a workflow artifact.
+`release.ps1` does the same locally, unsigned, as a fallback.
+
 Downloads: `RLMapLoader-Windows.exe` (self-contained), `RLMapLoader-Windows-NET9.exe` (needs the .NET 9 Desktop
 Runtime), `RLMapLoader-Linux.tar.gz` (first install) and `rl-map-loader-linux-x64` (used by the updater).
+
+## Code signing (SignPath)
+
+After the SignPath Foundation accepts the project:
+
+1. In SignPath, create the project (slug e.g. `rl-map-loader`) with a GitHub trusted build system, a release signing
+   policy that needs manual approval, and this artifact configuration (the GitHub artifact is a zip of the two exes):
+
+   ```xml
+   <?xml version="1.0" encoding="utf-8"?>
+   <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+     <zip-file>
+       <pe-file path="RLMapLoader-Windows.exe" product-name="RL Map Loader" product-version="1.*">
+         <authenticode-sign/>
+       </pe-file>
+       <pe-file path="RLMapLoader-Windows-NET9.exe" product-name="RL Map Loader" product-version="1.*">
+         <authenticode-sign/>
+       </pe-file>
+     </zip-file>
+   </artifact-configuration>
+   ```
+
+2. In this repo (Settings → Secrets and variables → Actions) add the secret `SIGNPATH_API_TOKEN` (a SignPath CI user's
+   token) and the variables `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG`.
+
+From then on every release waits for the signing request to be approved in SignPath (up to an hour), then publishes
+the signed files.

@@ -504,7 +504,15 @@
 
                             <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,26,0,0"/>
                             <TextBlock Text="UPDATES" Style="{StaticResource Label}" Margin="0,22,0,6"/>
-                            <CheckBox Style="{StaticResource Switch}" Margin="0,10,0,0" IsChecked="{Binding AutoUpdate}">
+                            <CheckBox Style="{StaticResource Switch}" Margin="0,10,0,0" IsChecked="{Binding CheckForUpdates}">
+                                <StackPanel>
+                                    <TextBlock Text="Check for updates automatically"/>
+                                    <TextBlock Text="Asks GitHub for a new version now and then. No personal data is sent."
+                                               FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" MaxWidth="330"/>
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Switch}" Margin="0,16,0,0" IsChecked="{Binding AutoUpdate}"
+                                      IsEnabled="{Binding CheckForUpdates}">
                                 <StackPanel>
                                     <TextBlock Text="Install updates automatically"/>
                                     <TextBlock Text="Downloads new versions in the background and installs them while the app is in the tray and Rocket League is closed"

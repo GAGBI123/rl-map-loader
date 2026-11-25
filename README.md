@@ -37,6 +37,23 @@ Download from the **[latest release](https://github.com/GAGBI123/rl-map-loader/r
 The app updates itself. You can turn automatic updates off, or check for updates manually, in
 **Settings → Updates**.
 
+## Privacy
+
+RL Map Loader doesn't collect or send any personal data. It only goes online to check this repository for new
+versions and download them ([GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)
+applies to those requests). You can turn that off in **Settings → Updates**.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)
+(applied for – Windows downloads are unsigned until the project is accepted).
+
+- Committers and reviewers: [GAGBI123](https://github.com/GAGBI123)
+- Approvers: [GAGBI123](https://github.com/GAGBI123)
+
+Releases are built from this repository's source by [GitHub Actions](.github/workflows/release.yml), and every signing
+request is approved by hand. Changes from other people (pull requests) are reviewed before they're merged.
+
 ---
 
-Building from source and how releases work: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+[MIT License](LICENSE) · Building from source and how releases work: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)

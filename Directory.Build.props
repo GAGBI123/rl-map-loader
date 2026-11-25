@@ -1,9 +1,13 @@
 <Project>
-  <!-- Shared by every project. Bump Version for each release (see release.ps1): installed apps compare
-       their own version with latest.json on the public releases repo and update themselves. -->
+  <!-- Shared by every project. Bump Version for each release (see docs/DEVELOPMENT.md): installed apps compare
+       their own version with latest.json in the newest GitHub release and update themselves. -->
   <PropertyGroup>
-    <Version>1.1.3</Version>
+    <Version>1.1.4</Version>
     <Product>RL Map Loader</Product>
+    <Company>GAGBI123</Company>
+    <Copyright>Copyright (c) 2026 GAGBI123 - MIT License</Copyright>
     <DebugType>embedded</DebugType>
+    <!-- product version "1.1.4" (no "+commit"), the same in every file of a release (code signing rules) -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 </Project>

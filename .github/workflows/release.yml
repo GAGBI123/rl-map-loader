@@ -1,0 +1,159 @@
+name: Release
+
+# Builds the Windows and Linux downloads from this repository and publishes them as a GitHub release, which every
+# installed copy updates from. Start it by pushing a version tag that matches <Version> in Directory.Build.props
+#   git tag -a v1.2.0 -m "What changed"  &&  git push origin v1.2.0
+# or from the Actions tab (Run workflow; leave "publish" off for a test build).
+# The Windows files are signed through SignPath once the SIGNPATH_* settings exist (see docs/DEVELOPMENT.md).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the release (off = only build; the files are kept as workflow artifacts)
+        type: boolean
+        default: false
+      notes:
+        description: What changed (release notes)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Read the version
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match <Version>$version</Version> in Directory.Build.props"
+            exit 1
+          fi
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet publish RLMapLoader/RLMapLoader.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out/sc -nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          dotnet publish RLMapLoader/RLMapLoader.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o out/net9 -nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item out/sc/RLMapLoader.exe dist/RLMapLoader-Windows.exe
+          Copy-Item out/net9/RLMapLoader.exe dist/RLMapLoader-Windows-NET9.exe
+      - name: Upload the unsigned files
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned
+          path: dist/*.exe
+          if-no-files-found: error
+      - name: Sign with SignPath
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+      - name: Collect the Windows files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force final | Out-Null
+          $from = if (Test-Path signed) { 'signed' } else { 'dist' }
+          Get-ChildItem $from -Recurse -Filter *.exe | Copy-Item -Destination final
+          Get-ChildItem final | ForEach-Object { "$($_.Name)  $($_.Length) bytes  signature: $((Get-AuthenticodeSignature $_.FullName).Status)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: final/*.exe
+          if-no-files-found: error
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build
+        run: |
+          dotnet publish RLMapLoader.Linux/RLMapLoader.Linux.csproj -c Release -r linux-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true \
+            -o out/linux -nologo
+          mkdir -p dist
+          cp out/linux/rl-map-loader dist/rl-map-loader-linux-x64
+          python3 tools/make_linux_tar.py dist/rl-map-loader-linux-x64 linux dist/RLMapLoader-Linux.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [version, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist
+      - name: Release notes
+        env:
+          NOTES: ${{ inputs.notes }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.txt
+          else
+            printf '%s' "$NOTES" > notes.txt
+          fi
+      - name: Update feed (latest.json)
+        run: python3 tools/write_feed.py dist "$VERSION" notes.txt
+      - name: Publish the release
+        if: github.event_name == 'push' || inputs.publish
+        run: |
+          gh release create "v$VERSION" --title "RL Map Loader $VERSION" --notes-file dist/release-notes.md --latest --target "$GITHUB_SHA" \
+            dist/RLMapLoader-Windows.exe dist/RLMapLoader-Windows-NET9.exe dist/RLMapLoader-Linux.tar.gz dist/rl-map-loader-linux-x64 dist/latest.json
+      - name: Keep the files (test build, not published)
+        if: github.event_name != 'push' && !inputs.publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: dist/*

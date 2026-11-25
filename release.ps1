@@ -1,4 +1,7 @@
 <#
+Local fallback for releases (unsigned). Normally GitHub Actions builds, signs and publishes releases
+(.github/workflows/release.yml) - see docs/DEVELOPMENT.md.
+
 Builds every download and, with -Publish, creates the GitHub release that installed apps update from.
 
   1. Bump <Version> in Directory.Build.props.
@@ -60,30 +63,12 @@ Copy-Item "$tmp\linux\rl-map-loader" "$out\rl-map-loader-linux-x64"
 & python (Join-Path $root 'tools\make_linux_tar.py') "$out\rl-map-loader-linux-x64" (Join-Path $root 'linux') "$out\RLMapLoader-Linux.tar.gz" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Packing the Linux tarball failed' }
 
-# The update feed: installed apps pick their file by key (self-contained Windows, .NET 9 Windows, Linux).
-$files = [ordered]@{ 'windows' = 'RLMapLoader-Windows.exe'; 'windows-net9' = 'RLMapLoader-Windows-NET9.exe'; 'linux-x64' = 'rl-map-loader-linux-x64' }
-$assets = [ordered]@{}
-foreach ($key in $files.Keys) {
-    $path = Join-Path $out $files[$key]
-    $assets[$key] = [ordered]@{
-        file   = $files[$key]
-        size   = (Get-Item $path).Length
-        sha256 = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLower()
-    }
-}
-$feed = [ordered]@{ version = $version; tag = $tag; date = (Get-Date -Format 'yyyy-MM-dd'); notes = $Notes.Trim(); assets = $assets }
-[IO.File]::WriteAllText((Join-Path $out 'latest.json'), ($feed | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
-
-$body = @"
-$($Notes.Trim())
-
-### Download
-- **Windows:** ``RLMapLoader-Windows.exe`` - just run it. (``RLMapLoader-Windows-NET9.exe`` is the small version for PCs that have the .NET 9 Desktop Runtime.)
-- **Linux:** ``RLMapLoader-Linux.tar.gz`` - extract it and open ``rl-map-loader`` once; it adds RL Map Loader to your app menu.
-
-Already installed? The app updates itself (Settings > Updates).
-"@
-[IO.File]::WriteAllText((Join-Path $out 'release-notes.md'), $body.Trim(), (New-Object Text.UTF8Encoding $false))
+# The update feed (latest.json) and the release text - the same script the GitHub Actions release uses
+$notesFile = Join-Path $out 'notes.txt'
+[IO.File]::WriteAllText($notesFile, $Notes.Trim(), (New-Object Text.UTF8Encoding $false))
+& python (Join-Path $root 'tools\write_feed.py') $out $version $notesFile | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Writing latest.json failed' }
+Remove-Item $notesFile
 
 Get-ChildItem $out | Format-Table Name, @{ n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } } -AutoSize | Out-String | Write-Host
 

@@ -22,6 +22,8 @@ namespace RLMapLoader.Services
         public bool StartWithWindows { get; set; }
         public bool TrayHintShown { get; set; }
 
+        /// <summary>Ask GitHub for new versions now and then. Off: the app only goes online when you click "Check for updates".</summary>
+        public bool CheckForUpdates { get; set; } = true;
         /// <summary>Download new versions in the background and install them when the app is idle.</summary>
         public bool AutoUpdate { get; set; } = true;
         /// <summary>Last version the user was told about (so "update available" isn't repeated every check).</summary>

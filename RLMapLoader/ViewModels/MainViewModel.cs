@@ -109,6 +109,18 @@ namespace RLMapLoader.ViewModels
         public UpdateController Updates { get; }
         public string VersionText => $"RL Map Loader {Updater.CurrentVersionText}";
 
+        public bool CheckForUpdates
+        {
+            get => Settings.CheckForUpdates;
+            set
+            {
+                Settings.CheckForUpdates = value;
+                Settings.Save();
+                OnPropertyChanged();
+                Updates.CheckForUpdatesChanged();
+            }
+        }
+
         public bool AutoUpdate
         {
             get => Settings.AutoUpdate;
