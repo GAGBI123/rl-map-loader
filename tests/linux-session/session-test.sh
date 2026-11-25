@@ -49,6 +49,9 @@ new_home() { # <check for updates true|false>
 EOF
     install -m 755 "$OLD" "$HOME/.local/bin/rl-map-loader"   # where the app installs itself
     APPLOG=$HOME/.local/share/RLMapLoader/log.txt
+    # keep the session small: no autostart programs (they keep it "starting", which refuses log out)
+    mkdir -p "$HOME/.config/autostart"
+    for f in /etc/xdg/autostart/*.desktop; do printf '[Desktop Entry]\nHidden=true\n' > "$HOME/.config/autostart/$(basename "$f")"; done
 }
 
 start_session() {
@@ -165,7 +168,14 @@ if start_session; then
     for _ in $(seq 40); do [ -n "$(main_window)" ] && break; sleep 0.5; done
     sleep 3
     shot before
-    xfce4-session-logout --logout > "$OUT/$SCEN-logout-command.txt" 2>&1 &
+    # log out (no dialog); the session manager refuses while it's still starting up, so ask again until it takes it
+    for _ in $(seq 30); do
+        if gdbus call --session --dest org.xfce.SessionManager --object-path /org/xfce/SessionManager \
+               --method org.xfce.Session.Manager.Logout false true >> "$OUT/$SCEN-logout-command.txt" 2>&1; then
+            say "log out requested"; break
+        fi
+        sleep 2
+    done
     for _ in $(seq 60); do alive "$SESSION_PID" || break; sleep 0.5; done
     sleep 1
     shot after
