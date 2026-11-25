@@ -26,8 +26,12 @@ $tmp = Join-Path $root 'release\obj'
 Write-Host "RL Map Loader $version"
 
 if ($Publish) {
-    & gh release view $tag --repo $Repo *> $null
-    if ($LASTEXITCODE -eq 0) { throw "$Repo already has a release $tag - bump the version in Directory.Build.props" }
+    # Windows PowerShell turns a native command's stderr into an error under 'Stop'
+    $ErrorActionPreference = 'Continue'
+    & gh release view $tag --repo $Repo 2>&1 | Out-Null
+    $exists = $LASTEXITCODE -eq 0
+    $ErrorActionPreference = 'Stop'
+    if ($exists) { throw "$Repo already has a release $tag - bump the version in Directory.Build.props" }
 }
 
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
