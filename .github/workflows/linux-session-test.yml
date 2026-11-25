@@ -1,0 +1,56 @@
+name: Linux session test
+
+# Runs the Linux app in an X11 desktop session (tests/linux-session/session-test.sh): automatic update + restart from
+# the tray, "Restart to update" button, and log out. Also runs the released version for comparison (not required to pass).
+
+on:
+  workflow_dispatch:
+    inputs:
+      compare:
+        description: Released version to compare with (tag)
+        type: string
+        default: v1.1.4
+  push:
+    branches: ['ci-linux-test']
+
+permissions:
+  contents: read
+
+jobs:
+  session:
+    runs-on: ubuntu-24.04
+    env:
+      COMPARE: ${{ inputs.compare || 'v1.1.4' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Desktop packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xfce4-session xfwm4 dbus-x11 xdotool imagemagick python3-pil libice6 libsm6 > /dev/null
+      - name: Build
+        run: |
+          pub() { dotnet publish "$1/RLMapLoader.Linux/RLMapLoader.Linux.csproj" -c Release -r linux-x64 --self-contained true \
+                    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true \
+                    -p:Version=$2 -o "$PWD/out/$2" -nologo -v q; }
+          pub . 9.9.8
+          pub . 9.9.9
+          # the released version, and its code as a newer version to update to
+          git worktree add /tmp/compare "$COMPARE"
+          pub /tmp/compare 9.9.7
+          curl -sfL -o out/released "https://github.com/${{ github.repository }}/releases/download/$COMPARE/rl-map-loader-linux-x64"
+          chmod +x out/released
+      - name: This version (9.9.8 -> 9.9.9)
+        run: bash tests/linux-session/session-test.sh out/9.9.8/rl-map-loader out/9.9.9/rl-map-loader 9.9.9 results/this
+      - name: Released version for comparison
+        if: always()
+        run: bash tests/linux-session/session-test.sh out/released out/9.9.7/rl-map-loader 9.9.7 results/released || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: session-test-results
+          path: results

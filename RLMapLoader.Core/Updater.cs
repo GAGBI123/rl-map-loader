@@ -211,16 +211,23 @@ namespace RLMapLoader.Services
             }
         }
 
-        /// <summary>Starts the (updated) app; it waits for this process to exit before taking over.</summary>
+        /// <summary>
+        /// Starts the (updated) app; it waits for this process to exit before taking over. Throws when it can't be
+        /// started or quits right away, so the caller keeps running instead of leaving the user with no app.
+        /// </summary>
         public static void LaunchUpdated(IEnumerable<string> extraArgs)
         {
-            var psi = new ProcessStartInfo(ExePath!) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(ExePath!)! };
+            var exe = ExePath ?? throw new InvalidOperationException("Unknown app location");
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
             psi.ArgumentList.Add("--wait-pid");
             psi.ArgumentList.Add(Environment.ProcessId.ToString());
             psi.ArgumentList.Add("--updated-from");
             psi.ArgumentList.Add(CurrentVersionText);
             foreach (var a in extraArgs) psi.ArgumentList.Add(a);
-            Process.Start(psi)?.Dispose();
+            using var p = Process.Start(psi) ?? throw new InvalidOperationException("The new version didn't start");
+            // it waits for this process, so exiting this early means it failed
+            if (p.WaitForExit(700)) throw new InvalidOperationException($"The new version quit right away (exit code {p.ExitCode})");
+            Log.Write($"Started the new version (pid {p.Id})");
         }
 
         /// <summary>With "--wait-pid N": waits (up to 20 s) for the previous app process to exit.</summary>
@@ -237,9 +244,26 @@ namespace RLMapLoader.Services
                     p.WaitForExit(20_000);
                     return;
                 }
-                while (DateTime.UtcNow < until && !p.HasExited) Thread.Sleep(100);
+                // a process that has exited but wasn't reaped yet (zombie) still "exists" for HasExited
+                while (DateTime.UtcNow < until && !p.HasExited && !HasEnded(pid)) Thread.Sleep(100);
+                if (DateTime.UtcNow >= until) Log.Write($"The previous version (pid {pid}) didn't close within 20 s; starting anyway");
             }
             catch { /* already gone */ }
+        }
+
+        /// <summary>Linux: the process is gone or a zombie (state Z/X in /proc/PID/stat).</summary>
+        private static bool HasEnded(int pid)
+        {
+            try
+            {
+                var stat = File.ReadAllText($"/proc/{pid}/stat");
+                int k = stat.LastIndexOf(')');
+                return k < 0 || k + 2 >= stat.Length || stat[k + 2] is 'Z' or 'X' or 'x';
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         /// <summary>The version this process was updated from ("--updated-from 1.0.0"), if any.</summary>
@@ -369,6 +393,7 @@ namespace RLMapLoader.Services
         private string? _readyFile;
         private bool _restartWhenReady;
         private bool _readyNotified;
+        private bool _installed; // the new version is in place, only the restart is left
 
         public UpdateController(AppSettings settings, string assetKey, Action<Action> postToUi)
         {
@@ -620,22 +645,30 @@ namespace RLMapLoader.Services
 
         private void InstallAndRestart()
         {
-            if (_readyFile == null) return;
             _restartWhenReady = false;
-            try
+            if (_readyFile != null)
             {
-                Updater.Install(_readyFile);
-                _readyFile = null;
-                Log.Write($"Installed update {Update?.DisplayVersion}; restarting");
+                try
+                {
+                    Updater.Install(_readyFile);
+                    _readyFile = null;
+                    _installed = true;
+                    Log.Write($"Installed update {Update?.DisplayVersion}; restarting");
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("Installing the update failed: " + ex);
+                    Error = "Couldn't replace the app file: " + Friendly(ex);
+                    Set(UpdateState.Failed);
+                    Notify?.Invoke(Error, false);
+                    return;
+                }
             }
-            catch (Exception ex)
+            else if (!_installed)
             {
-                Log.Write("Installing the update failed: " + ex);
-                Error = "Couldn't replace the app file: " + Friendly(ex);
-                Set(UpdateState.Failed);
-                Notify?.Invoke(Error, false);
                 return;
             }
+            // (when the restart failed before, the button tries again)
             try
             {
                 Updater.LaunchUpdated(RestartArgs());
@@ -644,7 +677,7 @@ namespace RLMapLoader.Services
             {
                 // the new version is in place; it runs next time
                 Log.Write("Restarting after the update failed: " + ex.Message);
-                Notify?.Invoke("Updated – restart RL Map Loader to use the new version", true);
+                Notify?.Invoke("Updated – close and reopen RL Map Loader to use the new version", true);
                 return;
             }
             ExitForUpdate?.Invoke();

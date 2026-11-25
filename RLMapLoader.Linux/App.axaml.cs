@@ -33,6 +33,7 @@ namespace RLMapLoader.Linux
         private TrayIcon? _tray;
         private NativeMenuItem? _trayOverlayItem;
         private UpdateController _updates = null!;
+        private IDisposable? _sigterm;
 
         public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -99,8 +100,21 @@ namespace RLMapLoader.Linux
             SetupTray();
             if (_settings.StartWithWindows) Autostart.Apply(true); // keep the path fresh if the binary moved
 
+            // Log out / shut down: the session manager asks the app to quit. Quit (closing to the tray would cancel the logout).
+            _desktop.ShutdownRequested += (_, _) => OnSessionEnding("the session is ending");
+            // SIGTERM (e.g. the session being torn down, or "kill"): tidy up the same way, then let the process end.
+            _sigterm = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, _ =>
+            {
+                try { Dispatcher.UIThread.InvokeAsync(() => OnSessionEnding("SIGTERM")).Wait(TimeSpan.FromSeconds(5)); }
+                catch { /* UI thread gone or busy: just end */ }
+            });
+
             bool hidden = (StartHidden || _settings.StartMinimized) && _vm.IsConfigured && !ForceShow && !JustInstalled;
-            if (!hidden && !StartWithOverlay) _main.Show();
+            if (!hidden && !StartWithOverlay)
+            {
+                if (UpdatedFrom != null) ShowMain(); // bring it to the front: it replaces the window that was just open
+                else _main.Show();
+            }
             if (!_vm.IsConfigured) { _main.Show(); _vm.SettingsOpen = true; }
 
             Dispatcher.UIThread.Post(async () =>
@@ -273,13 +287,41 @@ namespace RLMapLoader.Linux
         private void ShutdownNow()
         {
             if (IsShuttingDown && _main.AllowClose) return;
+            StopServices();
+            _desktop.Shutdown();
+        }
+
+        /// <summary>
+        /// Log out, shut down or SIGTERM: no questions, nothing that could hold the session up. Restores Underpass (when
+        /// that's on) and installs a downloaded update, like quitting does. After a logout request Avalonia closes the
+        /// windows and ends the app itself.
+        /// </summary>
+        private void OnSessionEnding(string why)
+        {
+            if (IsShuttingDown) return;
+            Log.Write($"Quitting: {why}");
+            try
+            {
+                if (_settings.RestoreOnExit && MapSwapper.GetStatus(_settings.CookedPath).State == UnderpassState.Custom
+                    && MapSwapper.RestoreAsync(_settings.CookedPath!).Wait(TimeSpan.FromSeconds(10)))
+                    Log.Write("Restored original Underpass on quit");
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Restore on quit failed: " + ex.Message);
+            }
+            _updates.ApplyOnExit();
+            StopServices();
+        }
+
+        private void StopServices()
+        {
             IsShuttingDown = true;
             _updates.Stop();
             _hotkey.Dispose();
             SingleInstance.Stop();
             if (_tray != null) _tray.IsVisible = false;
             _main.AllowClose = true;
-            _desktop.Shutdown();
         }
     }
 }

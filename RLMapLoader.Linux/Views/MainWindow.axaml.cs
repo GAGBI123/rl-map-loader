@@ -56,7 +56,10 @@ namespace RLMapLoader.Linux.Views
 
         protected override void OnClosing(WindowClosingEventArgs e)
         {
-            if (!AllowClose)
+            // Closing as part of quitting the app (log out / shut down included) must never be cancelled:
+            // the session manager would report that RL Map Loader cancelled the logout.
+            bool appQuitting = e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown;
+            if (!AllowClose && !appQuitting)
             {
                 e.Cancel = true;
                 if (_vm.CloseToTray) Hide();

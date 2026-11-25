@@ -106,7 +106,8 @@ namespace RLMapLoader
 
             bool HasArg(string a) => e.Args.Any(x => x.Equals(a, StringComparison.OrdinalIgnoreCase));
             bool startHidden = (HasArg("--tray") || _settings.StartMinimized) && !HasArg("--show");
-            if (!startHidden || !_vm.IsConfigured) _main.Show();
+            if (!startHidden && updatedFrom != null) ShowMain(); // to the front: it replaces the window that was just open
+            else if (!startHidden || !_vm.IsConfigured) _main.Show();
             if (!_vm.IsConfigured) _vm.SettingsOpen = true;
 
             _ = _vm.RescanAsync();
@@ -305,6 +306,7 @@ namespace RLMapLoader
                     MapSwapper.RestoreAsync(_settings.CookedPath!).GetAwaiter().GetResult();
             }
             catch { }
+            _updates?.ApplyOnExit(); // like quitting: a downloaded update is in place for the next start
             base.OnSessionEnding(e);
         }
     }

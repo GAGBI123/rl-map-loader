@@ -264,7 +264,7 @@ namespace RLMapLoader.Linux.Views
 
         protected override void OnClosing(WindowClosingEventArgs e)
         {
-            if (!App.IsShuttingDown)
+            if (!App.IsShuttingDown && e.CloseReason is not (WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown))
             {
                 e.Cancel = true;
                 HideOverlay();

@@ -103,6 +103,15 @@ namespace RLMapLoader.Linux.Platform
             }
         }
 
+        /// <summary>
+        /// After the installed copy updated itself: refresh the menu entry and the version stamp, so opening an older
+        /// downloaded copy later doesn't put that older version back.
+        /// </summary>
+        public static void AfterUpdate()
+        {
+            if (Environment.ProcessPath is { } exe && SamePath(exe, InstalledPath)) EnsureMenuEntry();
+        }
+
         /// <summary>Writes the app-menu entry and icon (pointing at the installed binary) when missing or outdated.</summary>
         public static void EnsureMenuEntry()
         {

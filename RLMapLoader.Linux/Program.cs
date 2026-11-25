@@ -29,7 +29,11 @@ namespace RLMapLoader.Linux
             bool restarted = args.Contains("--wait-pid");
             Updater.WaitForPreviousInstance(args);
 
-            if (!restarted)
+            if (restarted)
+            {
+                if (OperatingSystem.IsLinux()) SelfInstall.AfterUpdate();
+            }
+            else
             {
                 // Opened from a download: install to ~/.local/bin + app menu, then run that copy.
                 if (OperatingSystem.IsLinux() && SelfInstall.TryInstallAndRelaunch(args)) return 0;
