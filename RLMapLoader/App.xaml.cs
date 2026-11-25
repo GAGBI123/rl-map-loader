@@ -36,9 +36,12 @@ namespace RLMapLoader
         {
             base.OnStartup(e);
 
+            AppDomain.CurrentDomain.UnhandledException += (_, a) => Log.Write("Crashed: " + a.ExceptionObject);
+
             // After an update the new exe starts while the old one is still closing: let it finish first.
-            Updater.WaitForPreviousInstance(e.Args);
             string? updatedFrom = Updater.UpdatedFrom(e.Args);
+            if (updatedFrom != null) Log.Write($"Starting {Updater.CurrentVersionText} after an update ({string.Join(' ', e.Args)})");
+            Updater.WaitForPreviousInstance(e.Args);
 
             _mutex = new Mutex(true, MutexName, out bool created);
             if (!created)

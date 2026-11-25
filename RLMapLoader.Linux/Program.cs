@@ -25,8 +25,11 @@ namespace RLMapLoader.Linux
 
             if (OperatingSystem.IsLinux() && args.Contains("--install")) return SelfInstall.InstallOnly();
 
+            AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write("Crashed: " + e.ExceptionObject);
+
             // Restarting after an update: the previous process is still closing.
             bool restarted = args.Contains("--wait-pid");
+            if (restarted) Log.Write($"Starting {Updater.CurrentVersionText} after an update ({string.Join(' ', args)})");
             Updater.WaitForPreviousInstance(args);
 
             if (restarted)

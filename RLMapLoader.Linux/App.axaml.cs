@@ -287,6 +287,7 @@ namespace RLMapLoader.Linux
         private void ShutdownNow()
         {
             if (IsShuttingDown && _main.AllowClose) return;
+            Log.Write("Quitting");
             StopServices();
             _desktop.Shutdown();
         }
