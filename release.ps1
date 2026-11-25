@@ -3,15 +3,15 @@ Builds every download and, with -Publish, creates the GitHub release that instal
 
   1. Bump <Version> in Directory.Build.props.
   2. .\release.ps1 -Notes "What changed"            # build only, into release\<version>
-  3. .\release.ps1 -Notes "What changed" -Publish   # build + upload to the public releases repo
+  3. .\release.ps1 -Notes "What changed" -Publish   # build + upload as a GitHub release
 
-Installed apps read latest.json from the newest release of $Repo (public, holds only the downloads; the source repo
-stays private), so publishing is all it takes for everyone to get the update. Needs: .NET 9 SDK, Python, gh (logged in).
+Installed apps read latest.json from the newest release of $Repo, so publishing is all it takes for everyone to get
+the update. Needs: .NET 9 SDK, Python, gh (logged in).
 #>
 param(
     [string]$Notes = "",
     [switch]$Publish,
-    [string]$Repo = "GAGBI123/rl-map-loader-releases"
+    [string]$Repo = "GAGBI123/rl-map-loader"
 )
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot

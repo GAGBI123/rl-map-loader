@@ -27,14 +27,14 @@ namespace RLMapLoader.Services
     }
 
     /// <summary>
-    /// Self-update through GitHub Releases. The feed is a public repo that only holds the downloads, so anyone with
-    /// the app can update without a GitHub account, while the source repo stays private.
+    /// Self-update through GitHub Releases of the public repo, so anyone with the app can update without a GitHub
+    /// account. (Versions 1.1.0-1.1.1 read GAGBI123/rl-map-loader-releases; its last release, 1.1.2, moved them here.)
     /// latest.json:  { "version": "1.2.0", "tag": "v1.2.0", "notes": "...",
     ///                 "assets": { "windows": { "file": "...", "size": 1, "sha256": "..." }, "windows-net9": {...}, "linux-x64": {...} } }
     /// </summary>
     public static class Updater
     {
-        public const string ReleasesRepo = "GAGBI123/rl-map-loader-releases";
+        public const string ReleasesRepo = "GAGBI123/rl-map-loader";
         public static string ReleasesPage => $"https://github.com/{ReleasesRepo}/releases/latest";
 
         /// <summary>For testing: point the app at another latest.json (http/https URL).</summary>
