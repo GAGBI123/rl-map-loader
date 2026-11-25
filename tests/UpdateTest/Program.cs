@@ -6,6 +6,7 @@ using RLMapLoader.Services;
 //   3. run A with RLMAPLOADER_UPDATE_FEED=http://.../latest.json
 // A checks, downloads, verifies, swaps itself for B and starts B, which waits for A to exit and cleans up.
 // Every step is appended to result.txt next to the exe.
+// "<key> --download-only" just checks and downloads+verifies (e.g. against the real feed, without running the result).
 var dir = Path.GetDirectoryName(Environment.ProcessPath)!;
 var result = Path.Combine(dir, "result.txt");
 void Note(string s) => File.AppendAllText(result, $"[{Updater.CurrentVersionText} pid {Environment.ProcessId}] {s}{Environment.NewLine}");
@@ -21,13 +22,14 @@ if (Updater.UpdatedFrom(args) is { } from)
     return 0;
 }
 
-var info = await Updater.CheckAsync(args.FirstOrDefault() ?? "test");
+var info = await Updater.CheckAsync(args.FirstOrDefault(a => !a.StartsWith("--")) ?? "test");
 if (info == null) { Note("no update"); return 0; }
 Note($"found {info.DisplayVersion} {info.Url} size={info.Size}");
 try
 {
     var ready = await Updater.DownloadAsync(info, new Progress<double>(_ => { }));
     Note("downloaded " + Path.GetFileName(ready));
+    if (args.Contains("--download-only")) { Note("verified; not installing (--download-only)"); File.Delete(ready); return 0; }
     Updater.Install(ready);
     Note("installed; launching");
     Updater.LaunchUpdated(new[] { "--tray" });
