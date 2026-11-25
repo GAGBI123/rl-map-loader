@@ -20,6 +20,9 @@ namespace RLMapLoader.Linux
         public static bool StartHidden { get; set; }
         public static bool StartWithOverlay { get; set; }
         public static bool StartWithRestore { get; set; }
+        public static bool ForceShow { get; set; }
+        public static bool JustInstalled { get; set; }
+        public static string? UpdatedFrom { get; set; }
 
         private IClassicDesktopStyleApplicationLifetime _desktop = null!;
         private AppSettings _settings = null!;
@@ -29,6 +32,7 @@ namespace RLMapLoader.Linux
         private readonly X11Hotkey _hotkey = new();
         private TrayIcon? _tray;
         private NativeMenuItem? _trayOverlayItem;
+        private UpdateController _updates = null!;
 
         public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -48,7 +52,12 @@ namespace RLMapLoader.Linux
 
             _settings = AppSettings.Load();
             CurrentSettings = _settings;
-            _vm = new MainViewModel(_settings);
+            Updater.CleanUp(afterUpdate: UpdatedFrom != null);
+            _updates = new UpdateController(_settings,
+                System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+                    ? "linux-arm64" : "linux-x64",
+                a => Dispatcher.UIThread.Post(a));
+            _vm = new MainViewModel(_settings, _updates);
             _main = new MainWindow(_vm);
             _overlay = new OverlayWindow(_vm, X11Hotkey.Available ? _hotkey : null);
 
@@ -67,6 +76,11 @@ namespace RLMapLoader.Linux
             _hotkey.Pressed += () => Dispatcher.UIThread.Post(() => _overlay.Toggle(keepGameFocus: true));
             _hotkey.GrabbedKey += key => Dispatcher.UIThread.Post(() => _overlay.HandleGrabbedKey(key));
             RegisterHotkey();
+            if (!_vm.HotkeyOk)
+            {
+                // the previous process (update / reinstall) may still hold the key for a moment
+                DispatcherTimer.RunOnce(RegisterHotkey, TimeSpan.FromSeconds(3));
+            }
             _main.HotkeyCaptureStarted += () => _hotkey.Unregister();
             _main.HotkeyCaptureCancelled += RegisterHotkey;
             _main.HotkeyCaptured += (key, mods) =>
@@ -85,7 +99,7 @@ namespace RLMapLoader.Linux
             SetupTray();
             if (_settings.StartWithWindows) Autostart.Apply(true); // keep the path fresh if the binary moved
 
-            bool hidden = (StartHidden || _settings.StartMinimized) && _vm.IsConfigured;
+            bool hidden = (StartHidden || _settings.StartMinimized) && _vm.IsConfigured && !ForceShow && !JustInstalled;
             if (!hidden && !StartWithOverlay) _main.Show();
             if (!_vm.IsConfigured) { _main.Show(); _vm.SettingsOpen = true; }
 
@@ -95,7 +109,49 @@ namespace RLMapLoader.Linux
                 if (StartWithOverlay) _overlay.ShowOverlay(OtherX11WindowActive());
                 if (StartWithRestore) await _vm.RestoreAsync();
             });
+            SetupUpdates();
             base.OnFrameworkInitializationCompleted();
+        }
+
+        // ------------------------------------------------------------ updates
+        private void SetupUpdates()
+        {
+            // Restart on its own only when nobody would notice: window closed to the tray, overlay hidden, nothing loading.
+            _updates.IsIdle = () => !_vm.IsBusy && !_overlay.IsVisible && !_main.IsVisible;
+            _updates.RestartArgs = () => _main.IsVisible ? new[] { "--show" } : new[] { "--tray" };
+            _updates.ExitForUpdate = ShutdownNow;
+            _updates.OpenUrl = MainViewModel.OpenUrl;
+            _updates.Notify += (message, important) =>
+            {
+                if (_main.IsVisible) _vm.Toast(message, ToastKind.Info);
+                else if (important) DesktopNotify(message + " – open the app to install it.");
+            };
+            _updates.Start();
+
+            if (UpdatedFrom != null)
+            {
+                var msg = $"Updated to version {Updater.CurrentVersionText}";
+                Log.Write($"{msg} (from {UpdatedFrom})");
+                if (_main.IsVisible) Dispatcher.UIThread.Post(() => _vm.Toast(msg, ToastKind.Success), DispatcherPriority.Background);
+                else DesktopNotify(msg);
+            }
+            else if (JustInstalled)
+            {
+                Dispatcher.UIThread.Post(() => _vm.Toast("RL Map Loader is in your app menu now – open it from there next time", ToastKind.Success),
+                    DispatcherPriority.Background);
+            }
+        }
+
+        /// <summary>Desktop notification through notify-send (libnotify), when it's installed.</summary>
+        private static void DesktopNotify(string message)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("notify-send") { UseShellExecute = false };
+                foreach (var a in new[] { "--app-name=RL Map Loader", "--icon=rl-map-loader", "RL Map Loader", message }) psi.ArgumentList.Add(a);
+                System.Diagnostics.Process.Start(psi)?.Dispose();
+            }
+            catch { /* not available */ }
         }
 
         private void HandleCommand(string cmd)
@@ -104,6 +160,7 @@ namespace RLMapLoader.Linux
             {
                 case "toggle-overlay": _overlay.Toggle(OtherX11WindowActive()); break;
                 case "restore": _ = _vm.RestoreAsync(); break;
+                case "quit-for-update": ShutdownNow(); break; // a newer copy is being installed
                 default: ShowMain(); break;
             }
         }
@@ -208,7 +265,16 @@ namespace RLMapLoader.Linux
                         return;
                 }
             }
+            _updates.ApplyOnExit();
+            ShutdownNow();
+        }
+
+        /// <summary>Quit right away (no "restore Underpass", no questions) - used by quit and by updates.</summary>
+        private void ShutdownNow()
+        {
+            if (IsShuttingDown && _main.AllowClose) return;
             IsShuttingDown = true;
+            _updates.Stop();
             _hotkey.Dispose();
             SingleInstance.Stop();
             if (_tray != null) _tray.IsVisible = false;

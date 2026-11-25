@@ -22,6 +22,11 @@ namespace RLMapLoader.Services
         public bool StartWithWindows { get; set; }
         public bool TrayHintShown { get; set; }
 
+        /// <summary>Download new versions in the background and install them when the app is idle.</summary>
+        public bool AutoUpdate { get; set; } = true;
+        /// <summary>Last version the user was told about (so "update available" isn't repeated every check).</summary>
+        public string? NotifiedUpdateVersion { get; set; }
+
         public string SortMode { get; set; } = "Name";
         public Dictionary<string, string> CustomImages { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> Favorites { get; set; } = new(StringComparer.OrdinalIgnoreCase);

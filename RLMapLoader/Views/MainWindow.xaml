@@ -172,6 +172,14 @@
             <TextBlock Text="RL Map Loader" FontSize="15" FontWeight="SemiBold" Margin="11,0,0,0" VerticalAlignment="Center"/>
         </StackPanel>
         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0">
+            <Button Style="{StaticResource PrimaryButton}" WindowChrome.IsHitTestVisibleInChrome="True" Margin="0,7,8,0" Padding="13,7"
+                    Command="{Binding UpdateNowCommand}" ToolTip="{Binding Updates.StatusText}"
+                    Visibility="{Binding Updates.ShowButton, Converter={StaticResource BoolVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" FontSize="12" VerticalAlignment="Center" Margin="0,1,8,0"/>
+                    <TextBlock Text="{Binding Updates.ButtonText}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Button Style="{StaticResource GhostButton}" WindowChrome.IsHitTestVisibleInChrome="True" Margin="0,7,6,0"
                     Click="OverlayButton_Click" ToolTip="Show the in-game overlay (works with Rocket League in Borderless or Windowed mode)">
                 <StackPanel Orientation="Horizontal">
@@ -496,6 +504,33 @@
                                       Content="Start minimized to the tray"/>
 
                             <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,26,0,0"/>
+                            <TextBlock Text="UPDATES" Style="{StaticResource Label}" Margin="0,22,0,6"/>
+                            <CheckBox Style="{StaticResource Switch}" Margin="0,10,0,0" IsChecked="{Binding AutoUpdate}">
+                                <StackPanel>
+                                    <TextBlock Text="Install updates automatically"/>
+                                    <TextBlock Text="Downloads new versions in the background and installs them while the app is in the tray and Rocket League is closed"
+                                               FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" MaxWidth="330"/>
+                                </StackPanel>
+                            </CheckBox>
+                            <TextBlock Text="{Binding Updates.StatusText}" Style="{StaticResource Body}" FontSize="12.5" Margin="0,14,0,0"
+                                       TextWrapping="Wrap" LineHeight="18"/>
+                            <Border Margin="0,10,0,0" CornerRadius="9" Background="{StaticResource Surface2}" Padding="12,9"
+                                    Visibility="{Binding Updates.HasNotes, Converter={StaticResource BoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="What's new" FontWeight="SemiBold" FontSize="12.5"/>
+                                    <TextBlock Text="{Binding Updates.Notes}" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                               LineHeight="17" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button Style="{StaticResource BaseButton}" Content="Check for updates" Padding="14,7"
+                                        Command="{Binding CheckUpdatesCommand}"/>
+                                <Button Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Padding="14,7" Content="{Binding Updates.ButtonText}"
+                                        Command="{Binding UpdateNowCommand}"
+                                        Visibility="{Binding Updates.ShowButton, Converter={StaticResource BoolVis}}"/>
+                            </StackPanel>
+
+                            <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,26,0,0"/>
                             <TextBlock Text="HELP" Style="{StaticResource Label}" Margin="0,22,0,10"/>
                             <TextBlock Text="How loading works" FontWeight="SemiBold"/>
                             <TextBlock Style="{StaticResource Body}" FontSize="12.5" Margin="0,4,0,0" LineHeight="18"
@@ -509,7 +544,7 @@
                                 <Button Style="{StaticResource GhostButton}" Content="Open logs" Margin="8,0,0,0"
                                         Command="{Binding CopyLogPathCommand}"/>
                             </StackPanel>
-                            <TextBlock Text="RL Map Loader 1.0" FontSize="11.5" Foreground="#5E6880" Margin="0,26,0,0"/>
+                            <TextBlock Text="{Binding VersionText}" FontSize="11.5" Foreground="#5E6880" Margin="0,26,0,0"/>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

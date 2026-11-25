@@ -26,10 +26,22 @@ overlay) and it's swapped into **Underpass** — then just start Free Play on Un
     file open or no backup of the original exists.
   - *Restore original* any time; optionally restored automatically when you exit.
 - Drag & drop `.upk` / `.udk` / `.zip` files to add maps, tray icon, start with Windows.
+- **Updates itself** from GitHub Releases (Settings → Updates). New versions download in the background and install
+  with a quick restart while the app sits in the tray and Rocket League is closed (or when you quit). Turn off
+  *Install updates automatically* to get an **Update** button instead.
+
+## Download
+
+Get the newest version from the [releases page](https://github.com/GAGBI123/rl-map-loader-releases/releases/latest):
+
+- **Windows:** `RLMapLoader-Windows.exe` – just run it (`RLMapLoader-Windows-NET9.exe` is the small build for PCs with
+  the .NET 9 Desktop Runtime).
+- **Linux:** `RLMapLoader-Linux.tar.gz` – extract it and open `rl-map-loader` once. It copies itself to
+  `~/.local/bin`, adds *RL Map Loader* to your app menu and starts; from then on open it from the menu.
 
 ## Use
 
-1. Run `RLMapLoader.exe` (needs the [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)).
+1. Run `RLMapLoader-Windows.exe` (or the NET9 build, which needs the [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)).
 2. Settings (gear icon): set
    - **Rocket League maps folder** — `rocketleague\TAGame\CookedPCConsole` (auto-detected for Epic and Steam)
    - **Custom maps folder** — where you keep downloaded maps
@@ -43,12 +55,10 @@ overlay) and it's swapped into **Underpass** — then just start Free Play on Un
 installed through **Heroic** or **Legendary** (Epic), **Steam/Proton** (native or Flatpak), and **Lutris**/**Bottles**
 Wine prefixes, and handles Linux's case-sensitive file names.
 
-Install a prebuilt binary (self-contained, no .NET needed):
-
-```bash
-tar xzf rl-map-loader-linux-x64.tar.gz
-cd rl-map-loader && ./install.sh        # installs to ~/.local/bin + app menu entry
-```
+Install the prebuilt app (self-contained, no .NET needed): extract `RLMapLoader-Linux.tar.gz` and open
+`rl-map-loader` (double-click, or `./rl-map-loader`). The first start installs it to `~/.local/bin` with an app-menu
+entry and icon, then runs that copy; `./install.sh` does the same from a terminal. Updates replace
+`~/.local/bin/rl-map-loader` in place. (`rl-map-loader --no-install` runs it from where it is.)
 
 Or build from source (`sudo pacman -S dotnet-sdk-9.0`):
 
@@ -79,6 +89,22 @@ Overlay hotkey on Linux:
 - `tools/airdribble-patch` — the Air Dribble Challenge map fix
 
 Icons in the Linux app are from Material Design Icons (Apache 2.0).
+
+## Releases and updates
+
+Installed apps read `latest.json` from the newest release of the **public** repo
+[`GAGBI123/rl-map-loader-releases`](https://github.com/GAGBI123/rl-map-loader-releases), which holds only the downloads –
+this source repo stays private, and nobody needs a GitHub account to update. `latest.json` lists each download
+(`windows`, `windows-net9`, `linux-x64`) with its size and SHA-256; the app verifies both before swapping itself.
+
+To ship an update: bump `<Version>` in `Directory.Build.props`, then
+
+```powershell
+.\release.ps1 -Notes "What changed" -Publish
+```
+
+It builds all downloads into `release\<version>`, writes `latest.json` and creates the GitHub release with `gh`.
+`tests/UpdateTest` exercises the update mechanics (check, download, checksum, swap, restart) against a local feed.
 
 ## Build
 

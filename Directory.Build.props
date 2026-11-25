@@ -1,0 +1,9 @@
+<Project>
+  <!-- Shared by every project. Bump Version for each release (see release.ps1): installed apps compare
+       their own version with latest.json on the public releases repo and update themselves. -->
+  <PropertyGroup>
+    <Version>1.1.0</Version>
+    <Product>RL Map Loader</Product>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>

@@ -39,9 +39,11 @@ namespace RLMapLoader.Linux.ViewModels
         public Func<Task<string[]?>>? PickMapFilesAsync { get; set; }
         public Func<string, Task<string?>>? PickImageAsync { get; set; }
 
-        public MainViewModel(AppSettings settings)
+        public MainViewModel(AppSettings settings, UpdateController updates)
         {
             Settings = settings;
+            Updates = updates;
+            Updates.Changed += RefreshCommands;
             _sortMode = settings.SortMode is "Name" or "Newest" or "Size" ? settings.SortMode : "Name";
             _rescanDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
             _rescanDebounce.Tick += async (_, _) => { _rescanDebounce.Stop(); await RescanAsync(); };
@@ -62,6 +64,8 @@ namespace RLMapLoader.Linux.ViewModels
             ShowInFolderCommand = Cmd(p => { if (p is MapItem m) OpenPath(Path.GetDirectoryName(m.Path)); });
             ToggleFavoriteCommand = Cmd(p => { if (p is MapItem m) ToggleFavorite(m); });
             SetSortCommand = Cmd(p => { if (p is string s) SortMode = s; });
+            UpdateNowCommand = Cmd(async _ => await Updates.InstallNowAsync(), _ => Updates.State != UpdateState.Downloading);
+            CheckUpdatesCommand = Cmd(async _ => await Updates.CheckAsync(manual: true), _ => Updates.Enabled && Updates.State != UpdateState.Checking);
 
             if (!RlLocator.IsValidCooked(Settings.CookedPath))
             {
@@ -110,6 +114,30 @@ namespace RLMapLoader.Linux.ViewModels
         public Command ShowInFolderCommand { get; }
         public Command ToggleFavoriteCommand { get; }
         public Command SetSortCommand { get; }
+        public Command UpdateNowCommand { get; }
+        public Command CheckUpdatesCommand { get; }
+
+        // ---------------------------------------------------------------- updates
+        public UpdateController Updates { get; }
+        public string VersionText => $"RL Map Loader {Updater.CurrentVersionText} for Linux";
+
+        public bool AutoUpdate
+        {
+            get => Settings.AutoUpdate;
+            set
+            {
+                Settings.AutoUpdate = value;
+                Settings.Save();
+                OnPropertyChanged();
+                Updates.AutoUpdateChanged();
+            }
+        }
+
+        public static void OpenUrl(string url)
+        {
+            try { Process.Start(new ProcessStartInfo("xdg-open") { UseShellExecute = false, ArgumentList = { url } }); }
+            catch (Exception ex) { Log.Write("Open link failed: " + ex.Message); }
+        }
 
         // ---------------------------------------------------------------- folders & settings
         public string CookedPath

@@ -7,5 +7,6 @@ prefix="${XDG_DATA_HOME:-$HOME/.local/share}"
 rm -f "$HOME/.local/bin/rl-map-loader" \
       "$prefix/applications/rl-map-loader.desktop" \
       "$prefix/icons/hicolor/512x512/apps/rl-map-loader.png" \
+      "$prefix/RLMapLoader/installed-version" \
       "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/rl-map-loader.desktop"
 echo "RL Map Loader removed."

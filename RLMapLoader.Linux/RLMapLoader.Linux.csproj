@@ -9,17 +9,20 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>rl-map-loader</AssemblyName>
     <RootNamespace>RLMapLoader.Linux</RootNamespace>
-    <Version>1.0.0</Version>
     <Product>RL Map Loader</Product>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- app-menu icon written by the self-install -->
+    <EmbeddedResource Include="../linux/rl-map-loader.png" LogicalName="rl-map-loader.png" />
   </ItemGroup>
 
   <ItemGroup>

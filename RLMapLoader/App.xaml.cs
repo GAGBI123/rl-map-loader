@@ -27,6 +27,7 @@ namespace RLMapLoader
         private OverlayWindow _overlay = null!;
         private HotkeyManager? _hotkeys;
         private Forms.NotifyIcon? _tray;
+        private UpdateController _updates = null!;
 
         public static AppSettings? CurrentSettings { get; private set; }
         public static bool IsShuttingDown { get; private set; }
@@ -34,6 +35,10 @@ namespace RLMapLoader
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // After an update the new exe starts while the old one is still closing: let it finish first.
+            Updater.WaitForPreviousInstance(e.Args);
+            string? updatedFrom = Updater.UpdatedFrom(e.Args);
 
             _mutex = new Mutex(true, MutexName, out bool created);
             if (!created)
@@ -62,7 +67,10 @@ namespace RLMapLoader
 
             _settings = AppSettings.Load();
             CurrentSettings = _settings;
-            _vm = new MainViewModel(_settings);
+            Updater.CleanUp(afterUpdate: updatedFrom != null);
+            _updates = new UpdateController(_settings, Updater.IsSelfContained ? "windows" : "windows-net9",
+                a => Dispatcher.BeginInvoke(a));
+            _vm = new MainViewModel(_settings, _updates);
             _main = new MainWindow(_vm);
             _overlay = new OverlayWindow(_vm);
 
@@ -96,11 +104,40 @@ namespace RLMapLoader
             SetupTray();
             if (_settings.StartWithWindows) StartupRegistration.Apply(true); // keep the path fresh if the exe moved
 
-            bool startHidden = e.Args.Any(a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase)) || _settings.StartMinimized;
+            bool HasArg(string a) => e.Args.Any(x => x.Equals(a, StringComparison.OrdinalIgnoreCase));
+            bool startHidden = (HasArg("--tray") || _settings.StartMinimized) && !HasArg("--show");
             if (!startHidden || !_vm.IsConfigured) _main.Show();
             if (!_vm.IsConfigured) _vm.SettingsOpen = true;
 
             _ = _vm.RescanAsync();
+            SetupUpdates(updatedFrom);
+        }
+
+        // ------------------------------------------------------------ updates
+        private void SetupUpdates(string? updatedFrom)
+        {
+            // Restart on its own only when nobody would notice: window closed to the tray, overlay hidden, nothing loading.
+            _updates.IsIdle = () => !_vm.IsBusy && !_overlay.IsVisible && !_main.IsVisible;
+            _updates.RestartArgs = () => _main.IsVisible ? new[] { "--show" } : new[] { "--tray" };
+            _updates.ExitForUpdate = Shutdown_;
+            _updates.OpenUrl = url =>
+            {
+                try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+            };
+            _updates.Notify += (message, important) =>
+            {
+                if (_main.IsVisible) _vm.Toast(message, ToastKind.Info);
+                else if (important) _tray?.ShowBalloonTip(5000, "RL Map Loader", message + " – open the app to install it.", Forms.ToolTipIcon.Info);
+            };
+            _updates.Start();
+
+            if (updatedFrom != null)
+            {
+                var msg = $"Updated to version {Updater.CurrentVersionText}";
+                Log.Write($"{msg} (from {updatedFrom})");
+                if (_main.IsVisible) _vm.Toast(msg, ToastKind.Success);
+                else _tray?.ShowBalloonTip(4000, "RL Map Loader", msg, Forms.ToolTipIcon.Info);
+            }
         }
 
         private void RegisterHotkey()
@@ -220,12 +257,14 @@ namespace RLMapLoader
                         return;
                 }
             }
+            _updates.ApplyOnExit();
             Shutdown_();
         }
 
         private void Shutdown_()
         {
             IsShuttingDown = true;
+            _updates?.Stop();
             try { _hotkeys?.Dispose(); } catch { }
             if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
             _main.AllowClose = true;

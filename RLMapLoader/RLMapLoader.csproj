@@ -12,12 +12,10 @@
     <RootNamespace>RLMapLoader</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.0</Version>
     <Product>RL Map Loader</Product>
     <Description>Load Rocket League workshop maps into Underpass, with an in-game overlay.</Description>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <DebugType>embedded</DebugType>
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 

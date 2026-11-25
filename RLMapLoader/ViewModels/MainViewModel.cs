@@ -38,10 +38,11 @@ namespace RLMapLoader.ViewModels
         public Action<UserFacingException>? ShowError { get; set; }
         public Action? RequestAdminRestart { get; set; }
 
-        public MainViewModel(AppSettings settings)
+        public MainViewModel(AppSettings settings, UpdateController updates)
         {
             _ui = Dispatcher.CurrentDispatcher;
             Settings = settings;
+            Updates = updates;
             MapsView = new ListCollectionView(Maps) { Filter = o => Matches((MapItem)o, SearchText) };
             OverlayView = new ListCollectionView(Maps) { Filter = o => Matches((MapItem)o, OverlaySearchText) };
             _sortMode = settings.SortMode is "Name" or "Newest" or "Size" ? settings.SortMode : "Name";
@@ -66,6 +67,8 @@ namespace RLMapLoader.ViewModels
             ShowInExplorerCommand = new RelayCommand(p => { if (p is MapItem m) Reveal(m.Path); });
             ToggleFavoriteCommand = new RelayCommand(p => { if (p is MapItem m) ToggleFavorite(m); });
             SetSortCommand = new RelayCommand(p => { if (p is string s) SortMode = s; });
+            UpdateNowCommand = new AsyncCommand(async _ => await Updates.InstallNowAsync(), _ => Updates.State != UpdateState.Downloading);
+            CheckUpdatesCommand = new AsyncCommand(async _ => await Updates.CheckAsync(manual: true), _ => Updates.Enabled);
             CopyLogPathCommand = new RelayCommand(() => OpenFolder(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RLMapLoader")));
 
@@ -99,6 +102,24 @@ namespace RLMapLoader.ViewModels
         public ICommand ToggleFavoriteCommand { get; }
         public ICommand SetSortCommand { get; }
         public ICommand CopyLogPathCommand { get; }
+        public ICommand UpdateNowCommand { get; }
+        public ICommand CheckUpdatesCommand { get; }
+
+        // ---------------------------------------------------------------- updates
+        public UpdateController Updates { get; }
+        public string VersionText => $"RL Map Loader {Updater.CurrentVersionText}";
+
+        public bool AutoUpdate
+        {
+            get => Settings.AutoUpdate;
+            set
+            {
+                Settings.AutoUpdate = value;
+                Settings.Save();
+                OnPropertyChanged();
+                Updates.AutoUpdateChanged();
+            }
+        }
 
         // ---------------------------------------------------------------- folders / settings
         public string CookedPath
