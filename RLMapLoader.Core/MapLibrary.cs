@@ -239,25 +239,119 @@ namespace RLMapLoader.Services
                 else if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     using var zip = ZipFile.OpenRead(src);
-                    var entries = zip.Entries.Where(e => e.Length > 0 &&
-                        (IsMapFile(e.Name) || IsImageFile(e.Name) || e.Name.Equals("info.json", StringComparison.OrdinalIgnoreCase))).ToList();
-                    var mapEntry = entries.FirstOrDefault(e => IsMapFile(e.Name));
-                    if (mapEntry == null) continue;
-                    // keep the map's own folder name from the zip ("Ice Rings/...") - it's the real title
-                    var top = mapEntry.FullName.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-                    var folderName = top.Length > 1 ? top[^2] : System.IO.Path.GetFileNameWithoutExtension(src);
-                    var dir = System.IO.Path.Combine(mapsRoot, SafeName(folderName));
-                    Directory.CreateDirectory(dir);
-                    foreach (var e in entries)
-                    {
-                        var dest = System.IO.Path.Combine(dir, SafeName(e.Name));
-                        if (IsMapFile(dest) && File.Exists(dest) && !confirmOverwrite(e.Name)) continue;
-                        e.ExtractToFile(dest, overwrite: true);
-                        if (IsMapFile(dest)) imported.Add(dest);
-                    }
+                    if (!zip.Entries.Any(e => e.Length > 0 && IsMapFile(e.Name))) continue;
+                    var top = SingleTopFolder(zip);
+                    var dir = System.IO.Path.Combine(mapsRoot, SafeName(top ?? System.IO.Path.GetFileNameWithoutExtension(src)));
+                    imported.AddRange(ExtractMapEntries(zip, dir, top != null, confirmOverwrite));
                 }
             }
             return imported;
+        }
+
+        /// <summary>
+        /// Zips in the maps folder count as maps: each zip that holds a .upk/.udk is unpacked next to itself (its own
+        /// folder, keeping pictures and info.json) unless its maps are already there. The zip itself is kept.
+        /// Returns the maps that were unpacked.
+        /// </summary>
+        public static List<string> UnpackZips(string root)
+        {
+            var unpacked = new List<string>();
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return unpacked;
+            var opts = new EnumerationOptions
+            {
+                RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 6, MatchCasing = MatchCasing.CaseInsensitive,
+            };
+            var zips = Directory.EnumerateFiles(root, "*.zip", opts).ToList();
+            if (zips.Count == 0) return unpacked;
+
+            // maps already on disk (name + size), so a zip that was unpacked before - by us or by hand - is left alone
+            var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in Directory.EnumerateFiles(root, "*", opts).Where(IsMapFile))
+            {
+                try { present.Add(MapKey(System.IO.Path.GetFileName(f), new FileInfo(f).Length)); } catch { }
+            }
+
+            foreach (var zipPath in zips)
+            {
+                try
+                {
+                    using var zip = ZipFile.OpenRead(zipPath);
+                    var maps = zip.Entries.Where(e => e.Length > 0 && IsMapFile(e.Name) && !IsJunk(e.FullName)).ToList();
+                    if (maps.Count == 0 || maps.All(e => present.Contains(MapKey(e.Name, e.Length)))) continue;
+
+                    var top = SingleTopFolder(zip);
+                    var target = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(zipPath)!,
+                        SafeName(top ?? System.IO.Path.GetFileNameWithoutExtension(zipPath)));
+                    var got = ExtractMapEntries(zip, target, top != null, confirmOverwrite: null);
+                    unpacked.AddRange(got);
+                    foreach (var e in maps) present.Add(MapKey(e.Name, e.Length));
+                    Log.Write($"Unpacked {System.IO.Path.GetFileName(zipPath)} ({got.Count} map(s)) into {target}");
+                }
+                catch (Exception ex)
+                {
+                    // e.g. still downloading: tried again on the next scan
+                    Log.Write($"Couldn't unpack {zipPath}: {ex.Message}");
+                }
+            }
+            return unpacked;
+        }
+
+        private static string MapKey(string fileName, long size) => fileName + "|" + size;
+
+        private static bool IsJunk(string entryPath) =>
+            entryPath.Replace('\\', '/').StartsWith("__MACOSX/", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The one folder every file in the zip sits in ("Ice Rings/..."), or null.</summary>
+        private static string? SingleTopFolder(ZipArchive zip)
+        {
+            string? top = null;
+            foreach (var e in zip.Entries)
+            {
+                if (e.Name.Length == 0 || IsJunk(e.FullName)) continue; // folder entries, macOS metadata
+                var parts = e.FullName.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) return null;
+                if (top == null) top = parts[0];
+                else if (!top.Equals(parts[0], StringComparison.OrdinalIgnoreCase)) return null;
+            }
+            return top == null || SafeName(top).Length == 0 ? null : top;
+        }
+
+        /// <summary>
+        /// Extracts the maps, pictures and .json files of a zip into <paramref name="target"/>, keeping their sub-folders
+        /// (minus the single top folder when <paramref name="stripTop"/>). Entries can't escape the target folder.
+        /// Existing files are kept, except that with <paramref name="confirmOverwrite"/> pictures/json are replaced and
+        /// maps are replaced when it returns true. Returns the map files written.
+        /// </summary>
+        private static List<string> ExtractMapEntries(ZipArchive zip, string target, bool stripTop, Func<string, bool>? confirmOverwrite)
+        {
+            var maps = new List<string>();
+            var rootFull = System.IO.Path.GetFullPath(target).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+            foreach (var e in zip.Entries)
+            {
+                if (e.Name.Length == 0 || e.Length == 0 || IsJunk(e.FullName)) continue;
+                bool isMap = IsMapFile(e.Name);
+                if (!isMap && !IsImageFile(e.Name) && !e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var parts = e.FullName.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
+                if (stripTop && parts.Count > 1) parts.RemoveAt(0);
+                if (parts.Any(x => x is "." or "..")) continue;
+                var safe = parts.Select(SafeName).ToArray();
+                if (safe.Any(x => x.Length == 0)) continue;
+                var dest = System.IO.Path.GetFullPath(System.IO.Path.Combine(target, System.IO.Path.Combine(safe)));
+                if (!dest.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase)) continue; // "zip slip"
+
+                if (File.Exists(dest))
+                {
+                    if (confirmOverwrite == null) continue;
+                    if (isMap && !confirmOverwrite(e.Name)) continue;
+                }
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dest)!);
+                var tmp = dest + ".unzipping";
+                e.ExtractToFile(tmp, overwrite: true);
+                File.Move(tmp, dest, overwrite: true);
+                if (isMap) maps.Add(dest);
+            }
+            return maps;
         }
 
         private static string SafeName(string name)

@@ -516,6 +516,7 @@ namespace RLMapLoader.ViewModels
             {
                 var root = Settings.MapsPath ?? "";
                 var customs = new Dictionary<string, string>(Settings.CustomImages, StringComparer.OrdinalIgnoreCase);
+                var unzipped = await Task.Run(() => MapLibrary.UnpackZips(root));
                 var infos = await Task.Run(() => MapLibrary.Scan(root, customs));
 
                 var existing = Maps.ToDictionary(m => m.Path, StringComparer.OrdinalIgnoreCase);
@@ -542,6 +543,8 @@ namespace RLMapLoader.ViewModels
                 OnPropertyChanged(nameof(MapCount));
                 OnPropertyChanged(nameof(MapsHint));
                 LoadThumbnails();
+                if (unzipped.Count > 0)
+                    Toast(unzipped.Count == 1 ? "Unpacked a map from a zip file" : $"Unpacked {unzipped.Count} maps from zip files", ToastKind.Success);
                 await RefreshStatusAsync();
             }
             catch (Exception ex)
@@ -595,7 +598,8 @@ namespace RLMapLoader.ViewModels
 
         private void Poke(string path)
         {
-            if (!(MapLibrary.IsMapFile(path) || MapLibrary.IsImageFile(path) || !Path.HasExtension(path))) return;
+            if (!(MapLibrary.IsMapFile(path) || MapLibrary.IsImageFile(path) || !Path.HasExtension(path) ||
+                  path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))) return;
             _ui.BeginInvoke(() => { _rescanDebounce.Stop(); _rescanDebounce.Start(); });
         }
 

@@ -23,7 +23,8 @@ Download from the **[latest release](https://github.com/GAGBI123/rl-map-loader/r
 ## How to use
 
 1. On first start, set your **Rocket League maps folder** (`rocketleague/TAGame/CookedPCConsole`, usually found
-   automatically) and the folder with your **downloaded maps**.
+   automatically) and the folder with your **downloaded maps** (`.upk`, `.udk`, or `.zip` files, which are
+   unpacked automatically).
 2. Click a map → **Load map**, or press **F3** in game.
 3. In Rocket League: **Training → Free Play → Underpass**.
 4. Click **Restore original Underpass** before you play online.

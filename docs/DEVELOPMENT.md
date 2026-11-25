@@ -16,6 +16,8 @@ Icons in the Linux app are from Material Design Icons (Apache 2.0).
 
 - **Maps**: `.upk` / `.udk` in the maps folder and its sub-folders. Pictures come from `preview.jpg` in the map's
   folder or an image with the map's name; `info.json` (or `MapName.json`) gives `author` and `desc`.
+  Zips in the maps folder that contain maps are unpacked next to themselves (pictures and json included, entries
+  can't escape the folder) unless their maps are already present; the zip is kept.
 - **Swapping**: the original `Labs_Underpass_P.upk` is kept as `Labs_Underpass_P.upk.bak` (the convention other
   loaders use) plus a private safety copy. Originals are recognised by their package header (Psyonix packages have a
   non-zero licensee version, UDK-built maps have 0). The map is copied to a temp file first and swapped in at the end.
