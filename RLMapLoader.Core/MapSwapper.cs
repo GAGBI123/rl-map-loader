@@ -127,18 +127,90 @@ namespace RLMapLoader.Services
         public static SwapStatus GetStatus(string? cooked)
         {
             if (!RlLocator.IsValidCooked(cooked)) return new SwapStatus(UnderpassState.NotConfigured);
+            var judge = new Judge(cooked!);
             var target = TargetPath(cooked!);
+            if (judge.IsGenuine(target))
+            {
+                TryEnsureSafetyCopy(target, judge);
+                return new SwapStatus(UnderpassState.Original);
+            }
+            TryEnsureSafetyCopy(BakPath(cooked!), judge);
             if (IsOriginal(target))
             {
-                TryEnsureSafetyCopy(target);
-                return new SwapStatus(IsCurrent(target, GameVersion(cooked!)) ? UnderpassState.Original : UnderpassState.Outdated);
+                judge.Report(target, "in the game folder");
+                return new SwapStatus(UnderpassState.Outdated);
             }
-            TryEnsureSafetyCopy(BakPath(cooked!));
             if (!File.Exists(target)) return new SwapStatus(UnderpassState.Missing);
             return new SwapStatus(UnderpassState.Custom, new FileInfo(target).Length, Fingerprint(target));
         }
 
-        public static bool HasAnyBackup(string cooked) => BestBackup(cooked, out _) != null;
+        public static bool HasAnyBackup(string cooked) => BestBackup(cooked, new Judge(cooked), out _) != null;
+
+        /// <summary>
+        /// Tells the genuine original Underpass of this install apart from older or damaged copies (which have the same
+        /// header): by the launcher's SHA-1 when its manifest is readable (Epic, Legendary, Heroic), otherwise by the
+        /// package version of the game's other maps (Steam).
+        /// </summary>
+        private sealed class Judge
+        {
+            public GameManifest.FileEntry? Expected { get; }
+            public int GameVersion { get; }
+
+            public Judge(string cooked)
+            {
+                try { Expected = GameManifest.FindUnderpass(cooked); }
+                catch (Exception ex) { Log.Write("Reading the game's manifest failed: " + ex.Message); }
+                GameVersion = MapSwapper.GameVersion(cooked);
+            }
+
+            public bool IsGenuine(string path) =>
+                IsOriginal(path) && (Expected is { } e ? MatchesManifest(path, e) : IsCurrent(path, GameVersion));
+
+            public string Describe(string path) =>
+                $"{new FileInfo(path).Length} bytes, package {VersionText(PackageVersion(path))}" +
+                (Expected is { } e ? $", sha1 {Sha1(path)}; the launcher's is {e.Size} bytes, sha1 {e.Sha1}" : $"; the game's maps are {VersionText(GameVersion)}");
+
+            /// <summary>Logs (once per file state) why an original-looking file isn't the right one.</summary>
+            public void Report(string path, string where)
+            {
+                try
+                {
+                    var key = path + "|" + new FileInfo(path).Length + "|" + File.GetLastWriteTimeUtc(path).Ticks;
+                    lock (ShaCache)
+                    {
+                        if (!_reported.Add(key)) return;
+                    }
+                    Log.Write($"The Underpass {where} doesn't match this game install: {Describe(path)}");
+                }
+                catch { /* logging only */ }
+            }
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> _reported = new();
+        private static readonly System.Collections.Generic.Dictionary<string, string> ShaCache = new();
+
+        private static bool MatchesManifest(string path, GameManifest.FileEntry e)
+        {
+            try { return new FileInfo(path).Length == e.Size && Sha1(path) == e.Sha1; }
+            catch { return false; }
+        }
+
+        private static string Sha1(string path)
+        {
+            var key = path + "|" + new FileInfo(path).Length + "|" + File.GetLastWriteTimeUtc(path).Ticks;
+            lock (ShaCache)
+            {
+                if (ShaCache.TryGetValue(key, out var known)) return known;
+            }
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var sha = Convert.ToHexString(SHA1.HashData(fs)).ToLowerInvariant();
+            lock (ShaCache)
+            {
+                if (ShaCache.Count > 64) ShaCache.Clear();
+                ShaCache[key] = sha;
+            }
+            return sha;
+        }
 
         // ------------------------------------------------------------ what counts as the original
 
@@ -218,35 +290,33 @@ namespace RLMapLoader.Services
         private static bool IsCurrent(string path, int gameVersion) => gameVersion == 0 || PackageVersion(path) >= gameVersion;
 
         /// <summary>
-        /// The saved original to put back: .bak or the safety copy, the newer package version first (.bak on a tie).
-        /// <paramref name="outdated"/>: it's from an older game build than the one installed.
+        /// The saved original to put back: .bak or the safety copy - the genuine one if there is one (.bak first),
+        /// otherwise the newer package version. <paramref name="outdated"/>: it isn't the genuine original of this install.
         /// </summary>
-        private static string? BestBackup(string cooked, out bool outdated)
+        private static string? BestBackup(string cooked, Judge judge, out bool outdated)
         {
             outdated = false;
-            string? best = null;
-            int bestVersion = -1;
-            foreach (var candidate in new[] { BakPath(cooked), SafetyPath })
-            {
-                if (!IsOriginal(candidate)) continue;
-                int v = PackageVersion(candidate);
-                if (v > bestVersion) (best, bestVersion) = (candidate, v);
-            }
-            if (best != null) outdated = !IsCurrent(best, GameVersion(cooked));
-            return best;
+            var candidates = new[] { BakPath(cooked), SafetyPath }.Where(IsOriginal).ToList();
+            if (candidates.FirstOrDefault(judge.IsGenuine) is { } genuine) return genuine;
+            if (candidates.Count == 0) return null;
+            outdated = true;
+            return candidates.OrderByDescending(PackageVersion).First();
         }
 
         /// <summary>
         /// Keep a private copy of the original Underpass so a deleted .bak can never lose it. Never replaced by a map
-        /// this app loaded, or by an older version of the original.
+        /// this app loaded, by a copy that doesn't match the game, or by an older version.
         /// </summary>
-        private static void TryEnsureSafetyCopy(string originalCandidate)
+        private static void TryEnsureSafetyCopy(string originalCandidate, Judge judge)
         {
             try
             {
                 if (!IsOriginal(originalCandidate)) return;
                 var safety = SafetyPath;
                 if (File.Exists(safety) && Fingerprint(safety) == Fingerprint(originalCandidate)) return;
+                bool candidateGenuine = judge.IsGenuine(originalCandidate);
+                if (judge.Expected != null && !candidateGenuine) return; // known to be wrong: not worth keeping
+                if (judge.IsGenuine(safety) && !candidateGenuine) return;
                 if (IsOriginal(safety) && PackageVersion(safety) > PackageVersion(originalCandidate)) return;
                 Directory.CreateDirectory(Path.GetDirectoryName(safety)!);
                 File.Copy(originalCandidate, safety + ".tmp", overwrite: true);
@@ -357,14 +427,18 @@ namespace RLMapLoader.Services
                 await Task.Run(() =>
                 {
                     // 2) keep the original as .bak (replacing a stale .bak after a game update)
-                    if (IsOriginal(target))
+                    var judge = new Judge(cooked);
+                    var best = BestBackup(cooked, judge, out bool bestOutdated);
+                    if (judge.IsGenuine(target) ||
+                        (IsOriginal(target) && (best == null || (bestOutdated && PackageVersion(target) >= PackageVersion(best)))))
                     {
-                        TryEnsureSafetyCopy(target);
+                        // the game's own file (or the best original there is): it becomes the backup
+                        TryEnsureSafetyCopy(target, judge);
                         File.Move(target, bak, overwrite: true);
                     }
-                    else if (BestBackup(cooked, out _) is { } best && !string.Equals(Path.GetFullPath(best), Path.GetFullPath(bak), StringComparison.Ordinal))
+                    else if (best != null && !SamePath(best, bak))
                     {
-                        // .bak is missing, or older than the safety copy
+                        // .bak is missing, wrong or older than the safety copy
                         File.Copy(best, bak, overwrite: true);
                     }
 
@@ -413,19 +487,23 @@ namespace RLMapLoader.Services
             var tmp = target + ".rlml-tmp";
             try
             {
-                int game = GameVersion(cooked);
+                var judge = new Judge(cooked);
+                if (judge.IsGenuine(target)) return;
                 bool targetIsOriginal = IsOriginal(target);
-                if (targetIsOriginal && IsCurrent(target, game)) return;
 
-                var source = BestBackup(cooked, out bool outdated);
-                if (source != null && !(targetIsOriginal && PackageVersion(source) <= PackageVersion(target)))
+                var source = BestBackup(cooked, judge, out bool outdated);
+                // with only wrong copies around, one that's no newer than the file in place doesn't help
+                if (source != null && !(targetIsOriginal && outdated && PackageVersion(source) <= PackageVersion(target)))
                 {
                     if (outdated && !allowOutdated)
-                        throw new UserFacingException(OutdatedMessage(source, game)) { OutdatedBackup = true };
-                    ThrowIfGameHasItOpen(target);
-                    if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(bak), StringComparison.Ordinal))
                     {
-                        TryEnsureSafetyCopy(bak);
+                        judge.Report(source, "saved as a backup");
+                        throw new UserFacingException(OutdatedMessage) { OutdatedBackup = true };
+                    }
+                    ThrowIfGameHasItOpen(target);
+                    if (SamePath(source, bak))
+                    {
+                        TryEnsureSafetyCopy(bak, judge);
                         File.Move(bak, target, overwrite: true);
                     }
                     else
@@ -436,16 +514,17 @@ namespace RLMapLoader.Services
                     NoteLoadedMap(null);
                     if (!IsOriginalPackage(target))
                         throw new UserFacingException("Putting the original Underpass back didn't work.\n\nVerify Rocket League's files in the Epic Games / Steam launcher to restore it.");
-                    Log.Write($"Restored the original Underpass from {Path.GetFileName(source)} ({new FileInfo(target).Length} bytes, " +
-                              $"package {VersionText(PackageVersion(target))}, game {VersionText(game)})");
+                    Log.Write($"Restored the original Underpass from {Path.GetFileName(source)}: {judge.Describe(target)}" +
+                              (judge.IsGenuine(target) ? " (matches the game)" : " (doesn't match the game; restored anyway)"));
                     return;
                 }
                 if (targetIsOriginal)
                 {
-                    // an older original is in place and nothing newer is saved: only the launcher can fix it
+                    // a wrong original is in place and nothing better is saved: only the launcher can fix it
+                    judge.Report(target, "in the game folder");
                     throw new UserFacingException(
-                        "The Underpass file in the game folder is from an older version of Rocket League, and no newer copy is saved.\n\n" +
-                        "Verify Rocket League's files in the Epic Games / Steam / Heroic launcher – that puts the current Underpass back.");
+                        "The Underpass file in the game folder doesn't match your Rocket League version (it's from an older version " +
+                        "or damaged), and no correct copy is saved.\n\n" + VerifyHint);
                 }
             }
             catch (UnauthorizedAccessException ex)
@@ -464,14 +543,17 @@ namespace RLMapLoader.Services
                 "No backup of the original Underpass map was found.\n\nVerify Rocket League's files in the Epic Games / Steam launcher to restore it.");
         });
 
-        private static string OutdatedMessage(string backup, int game)
-        {
-            Log.Write($"Saved original {backup} is package {VersionText(PackageVersion(backup))}, the game is {VersionText(game)}");
-            return "The saved copy of the original Underpass is from an older version of Rocket League. Putting it back would " +
-                   "likely crash the game when you open Underpass.\n\n" +
-                   "Best fix: verify Rocket League's files in the Epic Games / Steam / Heroic launcher – that puts the current " +
-                   "Underpass back (RL Map Loader keeps that one from then on).";
-        }
+        private const string VerifyHint =
+            "Fix: verify Rocket League's files in your launcher (Epic Games: Library → ⋯ → Manage → Verify; Steam: Properties → " +
+            "Installed Files → Verify; Heroic: the game's page → ⋮ → Verify and Repair). That puts the right Underpass back, " +
+            "and RL Map Loader keeps that one from then on.";
+
+        private const string OutdatedMessage =
+            "The saved copy of the original Underpass doesn't match your Rocket League version (it's from an older version or " +
+            "damaged). Putting it back would likely crash the game when you open Underpass.\n\n" + VerifyHint;
+
+        private static bool SamePath(string a, string b) =>
+            string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
         private static bool IsSharingViolation(IOException ex)
         {

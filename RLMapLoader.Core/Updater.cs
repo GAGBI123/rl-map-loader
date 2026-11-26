@@ -49,13 +49,36 @@ namespace RLMapLoader.Services
 
         private static Version Normalize(Version v) => new(v.Major, v.Minor, Math.Max(0, v.Build), Math.Max(0, v.Revision));
 
-        /// <summary>A published single-file app. Builds run from the IDE never replace themselves.</summary>
 #pragma warning disable IL3000 // an empty Location is exactly what identifies a single-file app here
-        public static bool IsPublishedBuild => string.IsNullOrEmpty(typeof(Updater).Assembly.Location);
+        /// <summary>
+        /// A published single-file app. Builds run from the IDE never replace themselves. The app's assemblies are either
+        /// inside the app file (empty Location) or, when it unpacks everything (Linux), in "&lt;base&gt;/&lt;app name&gt;/&lt;id&gt;/".
+        /// </summary>
+        public static bool IsPublishedBuild => IsBundled(typeof(Updater).Assembly.Location);
 
         /// <summary>Self-contained (bundles .NET) as opposed to needing the installed .NET runtime.</summary>
-        public static bool IsSelfContained => string.IsNullOrEmpty(typeof(object).Assembly.Location);
+        public static bool IsSelfContained
+        {
+            get
+            {
+                var coreLib = typeof(object).Assembly.Location;
+                return string.IsNullOrEmpty(coreLib) ||
+                       (IsBundled(typeof(Updater).Assembly.Location) &&
+                        string.Equals(Path.GetDirectoryName(coreLib), Path.GetDirectoryName(typeof(Updater).Assembly.Location), StringComparison.Ordinal));
+            }
+        }
 #pragma warning restore IL3000
+
+        private static bool IsBundled(string assemblyLocation)
+        {
+            if (string.IsNullOrEmpty(assemblyLocation)) return true;
+            var exe = Environment.ProcessPath;
+            var dir = Path.GetDirectoryName(assemblyLocation);
+            if (exe == null || dir == null) return false;
+            var appDir = Path.GetFileName(Path.GetDirectoryName(dir));
+            return string.Equals(appDir, Path.GetFileNameWithoutExtension(exe), StringComparison.OrdinalIgnoreCase)
+                   && !string.Equals(dir, Path.GetDirectoryName(exe), StringComparison.Ordinal);
+        }
 
         public static string? ExePath => Environment.ProcessPath;
 
@@ -307,6 +330,11 @@ namespace RLMapLoader.Services
                 var sep = Path.DirectorySeparatorChar;
                 var marker = $"{sep}.net{sep}";
                 string? current = null;
+#pragma warning disable IL3000
+                var own = typeof(Updater).Assembly.Location;
+#pragma warning restore IL3000
+                if (!string.IsNullOrEmpty(own) && IsBundled(own)) current = Path.GetDirectoryName(own); // everything unpacked
+                if (current == null)
                 using (var self = Process.GetCurrentProcess())
                 {
                     foreach (ProcessModule m in self.Modules)

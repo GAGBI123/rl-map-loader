@@ -133,7 +133,93 @@ static class Synthetic
             Check(FP(target) == fpOrig, "8 restore works once the game let go");
         }
 
+        await WithManifest(Path.Combine(root, "epic"), original, mapA);
+
+        // Heroic (Legendary) keeps the manifest in its config folder; installed.json says which install it belongs to
+        if (OperatingSystem.IsLinux())
+        {
+            var game = Path.Combine(root, "heroic-game");
+            var hcooked = Path.Combine(game, "TAGame", "CookedPCConsole");
+            Package(Path.Combine(hcooked, "Park_P.upk"), 34, 7);
+            var cfg = Path.Combine(root, "config");
+            var legendary = Path.Combine(cfg, "heroic", "legendaryConfig", "legendary");
+            Directory.CreateDirectory(Path.Combine(legendary, "manifests"));
+            File.WriteAllText(Path.Combine(legendary, "installed.json"),
+                "{\"Sugar\": {\"app_name\": \"Sugar\", \"install_path\": \"" + game + "\"}, \"Other\": {\"install_path\": \"/nowhere\"}}");
+            WriteManifest(Path.Combine(legendary, "manifests", "Sugar.manifest"), ("TAGame/CookedPCConsole/Labs_Underpass_P.upk", original));
+            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", cfg);
+            var e = GameManifest.FindUnderpass(hcooked);
+            Check(e != null && e.Manifest.EndsWith("Sugar.manifest"), "H Heroic manifest found through installed.json");
+            Check(GameManifest.FindUnderpass(Path.Combine(root, "TAGame", "CookedPCConsole")) == null, "H not used for another install");
+        }
+
         Console.WriteLine(fails == 0 ? "ALL PASSED" : $"{fails} FAILED");
         return fails;
+    }
+
+    /// <summary>A minimal binary Epic manifest (uncompressed) listing the given files with their SHA-1 and size.</summary>
+    static void WriteManifest(string path, params (string name, string file)[] entries)
+    {
+        static void FStr(BinaryWriter w, string s) { var b = System.Text.Encoding.ASCII.GetBytes(s); w.Write(b.Length + 1); w.Write(b); w.Write((byte)0); }
+        var body = new MemoryStream();
+        var w = new BinaryWriter(body);
+        w.Write(14); w.Write((byte)0); w.Write(18); w.Write((byte)0); w.Write(0);   // meta: size 14, nothing else
+        w.Write(9); w.Write((byte)0); w.Write(0);                                   // chunk data list: empty
+        w.Write(0); w.Write((byte)0); w.Write(entries.Length);                      // file manifest list
+        foreach (var e in entries) FStr(w, e.name);
+        foreach (var _ in entries) w.Write(0);                                      // symlink targets
+        foreach (var e in entries) { using var s = File.OpenRead(e.file); w.Write(System.Security.Cryptography.SHA1.HashData(s)); }
+        foreach (var _ in entries) w.Write((byte)0);                                // flags
+        foreach (var _ in entries) w.Write(0);                                      // install tags
+        foreach (var e in entries) { w.Write(1); w.Write(28); w.Write(new byte[16]); w.Write(0); w.Write((int)new FileInfo(e.file).Length); }
+        w.Flush();
+        var data = body.ToArray();
+        using var f = new BinaryWriter(File.Create(path));
+        f.Write(0x44BEC00Cu); f.Write(41); f.Write(data.Length); f.Write(data.Length); f.Write(new byte[20]); f.Write((byte)0); f.Write(18);
+        f.Write(data);
+    }
+
+    /// <summary>Epic / Heroic installs: the launcher's checksum decides what the original is.</summary>
+    static async Task WithManifest(string game, string original, string mapA)
+    {
+        var cooked = Path.Combine(game, "TAGame", "CookedPCConsole");
+        foreach (var name in new[] { "Park_P", "Stadium_P", "ARC_P" }) Package(Path.Combine(cooked, name + ".upk"), 34, name.Length);
+        Directory.CreateDirectory(Path.Combine(game, ".egstore"));
+        WriteManifest(Path.Combine(game, ".egstore", "TEST.manifest"),
+            ("TAGame/CookedPCConsole/Park_P.upk", Path.Combine(cooked, "Park_P.upk")),
+            ("TAGame/CookedPCConsole/Labs_Underpass_P.upk", original));
+        var damaged = Path.Combine(game, "damaged.upk");
+        Package(damaged, 34, 99, (int)new FileInfo(original).Length); // same header, version and size - wrong content
+        MapSwapper.SafetyPathOverride = Path.Combine(game, "safety", MapSwapper.TargetName);
+        var safety = MapSwapper.SafetyPath;
+        var target = Path.Combine(cooked, MapSwapper.TargetName);
+        var bak = target + ".bak";
+        string fpOrig = FP(original), fpBad = FP(damaged), fpA = FP(mapA);
+        void Reset() { foreach (var f in new[] { target, bak, safety }) if (File.Exists(f)) File.Delete(f); Directory.CreateDirectory(Path.GetDirectoryName(safety)!); }
+
+        var entry = GameManifest.FindUnderpass(cooked);
+        Check(entry != null && entry.Size == new FileInfo(original).Length, "M manifest read from .egstore");
+
+        Reset(); File.Copy(original, target);
+        Check(MapSwapper.GetStatus(cooked).State == UnderpassState.Original, "M1 launcher's file in place: Original");
+        File.Copy(damaged, target, true);
+        Check(MapSwapper.GetStatus(cooked).State == UnderpassState.Outdated, "M1 damaged copy (right header) is caught");
+        Check(FP(safety) == fpOrig, "M1 safety copy kept the right one");
+        await MapSwapper.RestoreAsync(cooked);
+        Check(FP(target) == fpOrig, "M1 restore replaces the damaged file with the right one");
+
+        Reset(); File.Copy(mapA, target); File.Copy(damaged, bak); File.Copy(original, safety);
+        await MapSwapper.RestoreAsync(cooked);
+        Check(FP(target) == fpOrig, "M2 restore skips a damaged .bak for the right safety copy");
+
+        Reset(); File.Copy(mapA, target); File.Copy(damaged, bak);
+        Check(await Throws(() => MapSwapper.RestoreAsync(cooked), e => e.OutdatedBackup), "M3 only a damaged copy saved: restore asks first");
+        Check(FP(target) == fpA, "M3 nothing changed");
+        Check(!File.Exists(safety), "M3 damaged copy not kept as the safety copy");
+
+        Reset(); File.Copy(damaged, target); File.Copy(original, bak);
+        await MapSwapper.LoadAsync(cooked, mapA, null);
+        Check(FP(target) == fpA && FP(bak) == fpOrig, "M4 loading over a damaged file keeps the right .bak");
+        _ = fpBad;
     }
 }

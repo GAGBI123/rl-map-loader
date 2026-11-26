@@ -10,7 +10,7 @@ on:
       compare:
         description: Released version to compare with (tag)
         type: string
-        default: v1.1.4
+        default: v1.1.6
 
 permissions:
   contents: read
@@ -19,7 +19,7 @@ jobs:
   session:
     runs-on: ubuntu-24.04
     env:
-      COMPARE: ${{ inputs.compare || 'v1.1.4' }}
+      COMPARE: ${{ inputs.compare || 'v1.1.6' }}
     steps:
       - uses: actions/checkout@v4
         with:

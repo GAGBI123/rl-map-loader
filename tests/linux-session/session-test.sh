@@ -49,6 +49,9 @@ new_home() { # <check for updates true|false>
   "RestoreOnExit": true, "CheckForUpdates": $1, "AutoUpdate": true }
 EOF
     install -m 755 "$OLD" "$HOME/.local/bin/rl-map-loader"   # where the app installs itself
+    # like a real install: the app-menu entry already exists (the first start then runs no helper programs, which
+    # once hid a bug where the running copy couldn't start the new version)
+    "$HOME/.local/bin/rl-map-loader" --install > /dev/null 2>&1
     APPLOG=$HOME/.local/share/RLMapLoader/log.txt
     # keep the session small: no autostart programs (they keep it "starting", which refuses log out)
     mkdir -p "$HOME/.config/autostart"

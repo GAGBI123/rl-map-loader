@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using RLMapLoader.Services;
 
@@ -13,6 +14,25 @@ class P
     static async Task<int> Main(string[] a)
     {
         if (a.Length == 2 && a[0] == "--synthetic") return await Synthetic.Run(a[1]);
+        if (a.Length >= 2 && a[0] == "--manifest")
+        {
+            // read-only: what the launcher says Underpass should be, and how the files on disk compare
+            var e = GameManifest.FindUnderpass(a[1]);
+            Console.WriteLine(e == null ? "no manifest entry" : $"manifest: {e.Name} size={e.Size} sha1={e.Sha1}\n  from {e.Manifest}");
+            foreach (var f in a[1..])
+            {
+                if (!File.Exists(f)) continue;
+                using var s = File.OpenRead(f);
+                var sha = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(s)).ToLowerInvariant();
+                Console.WriteLine($"  {(e != null && sha == e.Sha1 ? "MATCH " : "differs")} {new FileInfo(f).Length,10} {sha} {Path.GetFileName(f)}");
+            }
+            foreach (var m in a.Skip(1).Where(x => x.EndsWith(".manifest")))
+            {
+                var old = GameManifest.ReadEntry(m, n => n.EndsWith("CookedPCConsole/Labs_Underpass_P.upk", StringComparison.OrdinalIgnoreCase));
+                Console.WriteLine($"  {Path.GetFileName(m)}: {old?.Size} {old?.Sha1}");
+            }
+            return 0;
+        }
         string root = a[0], original = a[1], mapA = a[2], mapB = a[3], mapsDir = a[4];
         var cooked = Path.Combine(root, "cooked");
         if (Directory.Exists(root)) Directory.Delete(root, true);

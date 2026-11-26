@@ -373,7 +373,7 @@ namespace RLMapLoader.Linux.ViewModels
         {
             UnderpassState.Custom => "Put the original Labs_Underpass_P.upk back (do this before playing online)",
             UnderpassState.Missing => "Put the original Labs_Underpass_P.upk back",
-            UnderpassState.Outdated => "Put the current original Underpass back, if a copy of it is saved",
+            UnderpassState.Outdated => "Put the right Underpass back, if a correct copy is saved",
             _ => "The original Underpass is already in place",
         };
 
@@ -397,7 +397,7 @@ namespace RLMapLoader.Linux.ViewModels
             UnderpassState.Custom => "NOW LOADED IN UNDERPASS",
             UnderpassState.Original => "UNDERPASS IS ORIGINAL",
             UnderpassState.Missing => "UNDERPASS FILE MISSING",
-            UnderpassState.Outdated => "UNDERPASS IS OUTDATED",
+            UnderpassState.Outdated => "UNDERPASS NEEDS A FIX",
             _ => "NOT SET UP"
         };
 
@@ -406,7 +406,7 @@ namespace RLMapLoader.Linux.ViewModels
             UnderpassState.Custom => ActiveMap?.DisplayName ?? "Unknown custom map",
             UnderpassState.Original => "Original Underpass",
             UnderpassState.Missing => "Labs_Underpass_P.upk is missing",
-            UnderpassState.Outdated => "Underpass is from an older game version",
+            UnderpassState.Outdated => "Underpass doesn't match your game",
             _ => "Choose your Rocket League folder"
         };
 
@@ -417,7 +417,7 @@ namespace RLMapLoader.Linux.ViewModels
                 : "In Rocket League: Training → Free Play → pick Underpass.",
             UnderpassState.Original => "Pick a map below and hit Load – then start Free Play on Underpass.",
             UnderpassState.Missing => "Restore the original, or verify game files in your launcher.",
-            UnderpassState.Outdated => "It can crash the game. Verify Rocket League's files in your launcher (Heroic, Steam or Epic) to get the current one.",
+            UnderpassState.Outdated => "It can crash the game. Hit Restore to put the right one back, or verify Rocket League's files in Heroic / Steam.",
             _ => "Open Settings to point the loader at rocketleague/TAGame/CookedPCConsole."
         };
 
@@ -426,7 +426,7 @@ namespace RLMapLoader.Linux.ViewModels
             UnderpassState.Custom => "Active: " + (ActiveMap?.DisplayName ?? "custom map"),
             UnderpassState.Original => "Underpass is original",
             UnderpassState.Missing => "Underpass missing",
-            UnderpassState.Outdated => "Underpass is outdated",
+            UnderpassState.Outdated => "Underpass needs a fix",
             _ => "Not set up"
         };
 
@@ -538,7 +538,7 @@ namespace RLMapLoader.Linux.ViewModels
                 }
                 catch (UserFacingException ex) when (ex.OutdatedBackup && !quiet && AskAsync != null)
                 {
-                    if (!await AskAsync("The saved Underpass is outdated", ex.Message, "Restore anyway", "Cancel"))
+                    if (!await AskAsync("The saved Underpass doesn't match your game", ex.Message, "Restore anyway", "Cancel"))
                     {
                         Log.Write("Restore cancelled: the saved original is outdated");
                         return false;

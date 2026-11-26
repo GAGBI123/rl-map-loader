@@ -14,6 +14,10 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Single-file: unpack everything at start (to ~/.net/rl-map-loader/<id>). Otherwise .NET reads parts of the app
+         from the app file on demand, and once an update has replaced that file the running copy can't even start the
+         new version ("Could not load file or assembly System.IO.Pipes"). -->
+    <IncludeAllContentForSelfExtract Condition="'$(PublishSingleFile)' == 'true' and '$(SelfContained)' == 'true'">true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
