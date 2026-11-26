@@ -201,7 +201,7 @@ namespace RLMapLoader
             menu.Items.Add("Restore original Underpass", null, async (_, _) => await _vm.RestoreAsync());
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add("Exit", null, (_, _) => ExitApp());
-            menu.Opening += (_, _) => menu.Items[2].Enabled = _vm.IsCustomActive;
+            menu.Opening += (_, _) => menu.Items[2].Enabled = _vm.CanRestore;
 
             _tray = new Forms.NotifyIcon
             {

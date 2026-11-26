@@ -49,7 +49,7 @@ namespace RLMapLoader.Linux.ViewModels
             _rescanDebounce.Tick += async (_, _) => { _rescanDebounce.Stop(); await RescanAsync(); };
 
             LoadCommand = Cmd(async p => await LoadAsync(p as MapItem ?? SelectedMap), _ => !IsBusy);
-            RestoreCommand = Cmd(async _ => await RestoreAsync(), _ => !IsBusy && State == UnderpassState.Custom);
+            RestoreCommand = Cmd(async _ => await RestoreAsync(), _ => !IsBusy && CanRestore);
             RefreshCommand = Cmd(async _ => { await RescanAsync(); Toast("Map list refreshed", ToastKind.Info); });
             OpenMapsFolderCommand = Cmd(_ => OpenPath(Settings.MapsPath), _ => MapsValid);
             OpenCookedFolderCommand = Cmd(_ => OpenPath(Settings.CookedPath), _ => CookedValid);
@@ -358,7 +358,7 @@ namespace RLMapLoader.Linux.ViewModels
             set
             {
                 if (!Set(ref _state, value)) return;
-                foreach (var p in new[] { nameof(IsCustomActive), nameof(HeroTitle), nameof(HeroSubtitle), nameof(HeroLabel), nameof(StatusShort), nameof(RestoreTooltip) })
+                foreach (var p in new[] { nameof(IsCustomActive), nameof(CanRestore), nameof(HeroTitle), nameof(HeroSubtitle), nameof(HeroLabel), nameof(StatusShort), nameof(RestoreTooltip) })
                     OnPropertyChanged(p);
                 RefreshCommands();
             }
@@ -366,9 +366,16 @@ namespace RLMapLoader.Linux.ViewModels
 
         public bool IsCustomActive => State == UnderpassState.Custom;
 
-        public string RestoreTooltip => State == UnderpassState.Custom
-            ? "Put the original Labs_Underpass_P.upk back (do this before playing online)"
-            : "The original Underpass is already in place";
+        /// <summary>A custom map, no file, or an outdated original is in place.</summary>
+        public bool CanRestore => State is UnderpassState.Custom or UnderpassState.Missing or UnderpassState.Outdated;
+
+        public string RestoreTooltip => State switch
+        {
+            UnderpassState.Custom => "Put the original Labs_Underpass_P.upk back (do this before playing online)",
+            UnderpassState.Missing => "Put the original Labs_Underpass_P.upk back",
+            UnderpassState.Outdated => "Put the current original Underpass back, if a copy of it is saved",
+            _ => "The original Underpass is already in place",
+        };
 
         private MapItem? _activeMap;
         public MapItem? ActiveMap
@@ -390,6 +397,7 @@ namespace RLMapLoader.Linux.ViewModels
             UnderpassState.Custom => "NOW LOADED IN UNDERPASS",
             UnderpassState.Original => "UNDERPASS IS ORIGINAL",
             UnderpassState.Missing => "UNDERPASS FILE MISSING",
+            UnderpassState.Outdated => "UNDERPASS IS OUTDATED",
             _ => "NOT SET UP"
         };
 
@@ -398,6 +406,7 @@ namespace RLMapLoader.Linux.ViewModels
             UnderpassState.Custom => ActiveMap?.DisplayName ?? "Unknown custom map",
             UnderpassState.Original => "Original Underpass",
             UnderpassState.Missing => "Labs_Underpass_P.upk is missing",
+            UnderpassState.Outdated => "Underpass is from an older game version",
             _ => "Choose your Rocket League folder"
         };
 
@@ -408,6 +417,7 @@ namespace RLMapLoader.Linux.ViewModels
                 : "In Rocket League: Training → Free Play → pick Underpass.",
             UnderpassState.Original => "Pick a map below and hit Load – then start Free Play on Underpass.",
             UnderpassState.Missing => "Restore the original, or verify game files in your launcher.",
+            UnderpassState.Outdated => "It can crash the game. Verify Rocket League's files in your launcher (Heroic, Steam or Epic) to get the current one.",
             _ => "Open Settings to point the loader at rocketleague/TAGame/CookedPCConsole."
         };
 
@@ -416,6 +426,7 @@ namespace RLMapLoader.Linux.ViewModels
             UnderpassState.Custom => "Active: " + (ActiveMap?.DisplayName ?? "custom map"),
             UnderpassState.Original => "Underpass is original",
             UnderpassState.Missing => "Underpass missing",
+            UnderpassState.Outdated => "Underpass is outdated",
             _ => "Not set up"
         };
 
@@ -521,7 +532,19 @@ namespace RLMapLoader.Linux.ViewModels
             Progress = 1;
             try
             {
-                await MapSwapper.RestoreAsync(Settings.CookedPath!);
+                try
+                {
+                    await MapSwapper.RestoreAsync(Settings.CookedPath!);
+                }
+                catch (UserFacingException ex) when (ex.OutdatedBackup && !quiet && AskAsync != null)
+                {
+                    if (!await AskAsync("The saved Underpass is outdated", ex.Message, "Restore anyway", "Cancel"))
+                    {
+                        Log.Write("Restore cancelled: the saved original is outdated");
+                        return false;
+                    }
+                    await MapSwapper.RestoreAsync(Settings.CookedPath!, allowOutdated: true);
+                }
                 await RefreshStatusAsync();
                 if (!quiet) Toast("Original Underpass restored – safe to play online", ToastKind.Success);
                 return true;

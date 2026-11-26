@@ -12,6 +12,7 @@ class P
 
     static async Task<int> Main(string[] a)
     {
+        if (a.Length == 2 && a[0] == "--synthetic") return await Synthetic.Run(a[1]);
         string root = a[0], original = a[1], mapA = a[2], mapB = a[3], mapsDir = a[4];
         var cooked = Path.Combine(root, "cooked");
         if (Directory.Exists(root)) Directory.Delete(root, true);
@@ -65,8 +66,9 @@ class P
         try { await MapSwapper.LoadAsync(cooked, mapB, null); Check(false, "7 should refuse without backup"); }
         catch (UserFacingException) { Check(FP(target) == fpA, "7 refused without backup, target untouched"); }
 
-        // 8. file locked by the game
+        // 8. file locked by the game (Windows locks; Linux is covered by --synthetic)
         File.Copy(original, target, true); if (File.Exists(bak)) File.Delete(bak);
+        if (OperatingSystem.IsWindows())
         using (var lockH = new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             try { await MapSwapper.LoadAsync(cooked, mapA, null); Check(false, "8 should fail while locked"); }

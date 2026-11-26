@@ -1,12 +1,16 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RLMapLoader.Services
 {
-    public enum UnderpassState { NotConfigured, Original, Custom, Missing }
+    /// <summary>
+    /// Outdated: an original Underpass from an older Rocket League version is in place (the game can crash opening it).
+    /// </summary>
+    public enum UnderpassState { NotConfigured, Original, Custom, Missing, Outdated }
 
     public sealed record SwapStatus(UnderpassState State, long CustomSize = 0, string? CustomFingerprint = null);
 
@@ -14,6 +18,8 @@ namespace RLMapLoader.Services
     public sealed class UserFacingException : Exception
     {
         public bool NeedsAdmin { get; }
+        /// <summary>The only saved original is from an older Rocket League version; restoring it anyway is possible.</summary>
+        public bool OutdatedBackup { get; init; }
         public UserFacingException(string message, bool needsAdmin = false, Exception? inner = null) : base(message, inner)
             => NeedsAdmin = needsAdmin;
     }
@@ -23,7 +29,9 @@ namespace RLMapLoader.Services
     /// The original is kept as Labs_Underpass_P.upk.bak (same convention as other RL map loaders)
     /// plus a safety copy in %LOCALAPPDATA%\RLMapLoader\Backup.
     /// Originals are recognised by their package header: Psyonix packages have a non-zero licensee version,
-    /// UDK-built custom maps have 0.
+    /// UDK-built custom maps have 0. A map this app loaded is never taken for the original, whatever its header says.
+    /// All maps of one game build share a package version (file + licensee version); an original with an older one is
+    /// from an earlier build (e.g. a .bak made before a game update) and is never put back without asking.
     /// </summary>
     public static class MapSwapper
     {
@@ -120,31 +128,126 @@ namespace RLMapLoader.Services
         {
             if (!RlLocator.IsValidCooked(cooked)) return new SwapStatus(UnderpassState.NotConfigured);
             var target = TargetPath(cooked!);
-            var bak = BakPath(cooked!);
-            TryEnsureSafetyCopy(bak);
-            if (!File.Exists(target)) return new SwapStatus(UnderpassState.Missing);
-            if (IsOriginalPackage(target))
+            if (IsOriginal(target))
             {
                 TryEnsureSafetyCopy(target);
-                return new SwapStatus(UnderpassState.Original);
+                return new SwapStatus(IsCurrent(target, GameVersion(cooked!)) ? UnderpassState.Original : UnderpassState.Outdated);
             }
+            TryEnsureSafetyCopy(BakPath(cooked!));
+            if (!File.Exists(target)) return new SwapStatus(UnderpassState.Missing);
             return new SwapStatus(UnderpassState.Custom, new FileInfo(target).Length, Fingerprint(target));
         }
 
-        public static bool HasAnyBackup(string cooked)
+        public static bool HasAnyBackup(string cooked) => BestBackup(cooked, out _) != null;
+
+        // ------------------------------------------------------------ what counts as the original
+
+        private static string LoadedRecordPath => Path.Combine(Path.GetDirectoryName(SafetyPath)!, "loaded-map.txt");
+
+        /// <summary>The file is the map this app swapped in last (its fingerprint is noted when loading).</summary>
+        private static bool IsMapWeLoaded(string path)
         {
-            var bak = BakPath(cooked);
-            return (File.Exists(bak) && IsOriginalPackage(bak)) || (File.Exists(SafetyPath) && IsOriginalPackage(SafetyPath));
+            try
+            {
+                if (!File.Exists(LoadedRecordPath)) return false;
+                var noted = File.ReadAllText(LoadedRecordPath).Trim();
+                return noted.Length > 0 && noted == Fingerprint(path);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
-        /// <summary>Keep a private copy of the original Underpass so a deleted .bak can never lose it.</summary>
+        private static void NoteLoadedMap(string? fingerprint)
+        {
+            try
+            {
+                if (fingerprint == null)
+                {
+                    if (File.Exists(LoadedRecordPath)) File.Delete(LoadedRecordPath);
+                    return;
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(LoadedRecordPath)!);
+                File.WriteAllText(LoadedRecordPath, fingerprint);
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Couldn't note the loaded map: " + ex.Message);
+            }
+        }
+
+        /// <summary>A Psyonix package that isn't a map this app loaded (some custom maps carry a Psyonix-like header).</summary>
+        private static bool IsOriginal(string path) => File.Exists(path) && IsOriginalPackage(path) && !IsMapWeLoaded(path);
+
+        /// <summary>File version and licensee version of a package in one number (0 when unreadable).</summary>
+        private static int PackageVersion(string path) => ReadHeader(path) is { } h && h.tag == PackageTag ? (h.version << 16) | h.licensee : 0;
+
+        private static string VersionText(int v) => $"{v >> 16}/{v & 0xFFFF}";
+
+        /// <summary>
+        /// The package version of the installed Rocket League build: the most common one among its other maps
+        /// (0 when it can't be told).
+        /// </summary>
+        public static int GameVersion(string cooked)
+        {
+            try
+            {
+                var counts = new System.Collections.Generic.Dictionary<int, int>();
+                int seen = 0;
+                var options = new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive };
+                foreach (var f in Directory.EnumerateFiles(cooked, "*_P.upk", options))
+                {
+                    if (Path.GetFileName(f).StartsWith("Labs_Underpass", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (ReadHeader(f) is not { } h || h.tag != PackageTag || h.licensee == 0) continue;
+                    int v = (h.version << 16) | h.licensee;
+                    counts[v] = (counts.TryGetValue(v, out var n) ? n : 0) + 1;
+                    if (++seen >= 15) break;
+                }
+                int best = 0, bestCount = 0;
+                foreach (var (v, n) in counts)
+                    if (n > bestCount) (best, bestCount) = (v, n);
+                return best;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static bool IsCurrent(string path, int gameVersion) => gameVersion == 0 || PackageVersion(path) >= gameVersion;
+
+        /// <summary>
+        /// The saved original to put back: .bak or the safety copy, the newer package version first (.bak on a tie).
+        /// <paramref name="outdated"/>: it's from an older game build than the one installed.
+        /// </summary>
+        private static string? BestBackup(string cooked, out bool outdated)
+        {
+            outdated = false;
+            string? best = null;
+            int bestVersion = -1;
+            foreach (var candidate in new[] { BakPath(cooked), SafetyPath })
+            {
+                if (!IsOriginal(candidate)) continue;
+                int v = PackageVersion(candidate);
+                if (v > bestVersion) (best, bestVersion) = (candidate, v);
+            }
+            if (best != null) outdated = !IsCurrent(best, GameVersion(cooked));
+            return best;
+        }
+
+        /// <summary>
+        /// Keep a private copy of the original Underpass so a deleted .bak can never lose it. Never replaced by a map
+        /// this app loaded, or by an older version of the original.
+        /// </summary>
         private static void TryEnsureSafetyCopy(string originalCandidate)
         {
             try
             {
-                if (!File.Exists(originalCandidate) || !IsOriginalPackage(originalCandidate)) return;
+                if (!IsOriginal(originalCandidate)) return;
                 var safety = SafetyPath;
                 if (File.Exists(safety) && Fingerprint(safety) == Fingerprint(originalCandidate)) return;
+                if (IsOriginal(safety) && PackageVersion(safety) > PackageVersion(originalCandidate)) return;
                 Directory.CreateDirectory(Path.GetDirectoryName(safety)!);
                 File.Copy(originalCandidate, safety + ".tmp", overwrite: true);
                 File.Move(safety + ".tmp", safety, overwrite: true);
@@ -152,6 +255,77 @@ namespace RLMapLoader.Services
             catch (Exception ex)
             {
                 Log.Write("Safety copy failed: " + ex.Message);
+            }
+        }
+
+        // ------------------------------------------------------------ the game holding the file (Linux)
+
+        /// <summary>
+        /// Windows refuses to replace a file the game has open. Linux doesn't, and swapping Underpass under the running
+        /// game (Proton / Wine) can crash it, so look at the game's open files instead.
+        /// </summary>
+        private static void ThrowIfGameHasItOpen(string target)
+        {
+            if (!OperatingSystem.IsLinux() || !File.Exists(target)) return;
+            if (OpenedByGame(target) is not { } who) return;
+            Log.Write($"{who} has {target} open");
+            throw new UserFacingException(InUseMessage);
+        }
+
+        private const string InUseMessage =
+            "Rocket League is using the Underpass map right now.\n\nLeave Free Play (go back to the main menu), then try again.";
+
+        private static string? OpenedByGame(string path)
+        {
+            try
+            {
+                var wanted = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal) { Path.GetFullPath(path) };
+                if (RealPath(path) is { } real) wanted.Add(real);
+                foreach (var proc in Directory.EnumerateDirectories("/proc"))
+                {
+                    if (!int.TryParse(Path.GetFileName(proc), out var pid) || pid == Environment.ProcessId) continue;
+                    string comm;
+                    try { comm = File.ReadAllText(Path.Combine(proc, "comm")).Trim(); }
+                    catch { continue; }
+                    // the game under Proton/Wine shows up as "RocketLeague.ex"; wineserver keeps the game's files open too
+                    if (!comm.StartsWith("RocketLeague", StringComparison.OrdinalIgnoreCase) && comm != "wineserver") continue;
+                    System.Collections.Generic.IEnumerable<string> fds;
+                    try { fds = Directory.EnumerateFileSystemEntries(Path.Combine(proc, "fd")).ToArray(); }
+                    catch { continue; } // not ours to look at
+                    foreach (var fd in fds)
+                    {
+                        string? link;
+                        try { link = new FileInfo(fd).LinkTarget; }
+                        catch { continue; }
+                        if (link != null && wanted.Contains(link)) return $"{comm} (pid {pid})";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Checking the game's open files failed: " + ex.Message);
+            }
+            return null;
+        }
+
+        [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "realpath", SetLastError = true)]
+        private static extern IntPtr NativeRealPath(string path, IntPtr resolved);
+
+        [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "free")]
+        private static extern void NativeFree(IntPtr p);
+
+        private static string? RealPath(string path)
+        {
+            try
+            {
+                var p = NativeRealPath(path, IntPtr.Zero);
+                if (p == IntPtr.Zero) return null;
+                try { return System.Runtime.InteropServices.Marshal.PtrToStringUTF8(p); }
+                finally { NativeFree(p); }
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -168,8 +342,8 @@ namespace RLMapLoader.Services
 
             await Task.Run(() =>
             {
-                bool targetIsOriginal = File.Exists(target) && IsOriginalPackage(target);
-                if (!targetIsOriginal && !HasAnyBackup(cooked))
+                ThrowIfGameHasItOpen(target);
+                if (!IsOriginal(target) && !HasAnyBackup(cooked))
                     throw new UserFacingException(
                         "Couldn't find the original Underpass map to keep as a backup, so nothing was changed.\n\n" +
                         "Verify Rocket League's files in the Epic Games / Steam launcher to restore it, then try again.");
@@ -183,17 +357,19 @@ namespace RLMapLoader.Services
                 await Task.Run(() =>
                 {
                     // 2) keep the original as .bak (replacing a stale .bak after a game update)
-                    if (File.Exists(target) && IsOriginalPackage(target))
+                    if (IsOriginal(target))
                     {
                         TryEnsureSafetyCopy(target);
                         File.Move(target, bak, overwrite: true);
                     }
-                    else if (!(File.Exists(bak) && IsOriginalPackage(bak)))
+                    else if (BestBackup(cooked, out _) is { } best && !string.Equals(Path.GetFullPath(best), Path.GetFullPath(bak), StringComparison.Ordinal))
                     {
-                        File.Copy(SafetyPath, bak, overwrite: true);
+                        // .bak is missing, or older than the safety copy
+                        File.Copy(best, bak, overwrite: true);
                     }
 
-                    // 3) swap the custom map in
+                    // 3) swap the custom map in (noted first, so it's never mistaken for the original)
+                    NoteLoadedMap(Fingerprint(tmp));
                     try
                     {
                         File.Move(tmp, target, overwrite: true);
@@ -226,41 +402,76 @@ namespace RLMapLoader.Services
             }
         }
 
-        public static Task RestoreAsync(string cooked) => Task.Run(() =>
+        /// <summary>
+        /// Puts the original Underpass back. A saved original from an older game build would crash the game, so it's only
+        /// used with <paramref name="allowOutdated"/> (otherwise a UserFacingException with OutdatedBackup is thrown).
+        /// </summary>
+        public static Task RestoreAsync(string cooked, bool allowOutdated = false) => Task.Run(() =>
         {
             var target = TargetPath(cooked);
             var bak = BakPath(cooked!);
+            var tmp = target + ".rlml-tmp";
             try
             {
-                if (File.Exists(target) && IsOriginalPackage(target)) return;
-                if (File.Exists(bak) && IsOriginalPackage(bak))
+                int game = GameVersion(cooked);
+                bool targetIsOriginal = IsOriginal(target);
+                if (targetIsOriginal && IsCurrent(target, game)) return;
+
+                var source = BestBackup(cooked, out bool outdated);
+                if (source != null && !(targetIsOriginal && PackageVersion(source) <= PackageVersion(target)))
                 {
-                    TryEnsureSafetyCopy(bak);
-                    File.Move(bak, target, overwrite: true);
+                    if (outdated && !allowOutdated)
+                        throw new UserFacingException(OutdatedMessage(source, game)) { OutdatedBackup = true };
+                    ThrowIfGameHasItOpen(target);
+                    if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(bak), StringComparison.Ordinal))
+                    {
+                        TryEnsureSafetyCopy(bak);
+                        File.Move(bak, target, overwrite: true);
+                    }
+                    else
+                    {
+                        File.Copy(source, tmp, overwrite: true);
+                        File.Move(tmp, target, overwrite: true);
+                    }
+                    NoteLoadedMap(null);
+                    if (!IsOriginalPackage(target))
+                        throw new UserFacingException("Putting the original Underpass back didn't work.\n\nVerify Rocket League's files in the Epic Games / Steam launcher to restore it.");
+                    Log.Write($"Restored the original Underpass from {Path.GetFileName(source)} ({new FileInfo(target).Length} bytes, " +
+                              $"package {VersionText(PackageVersion(target))}, game {VersionText(game)})");
                     return;
                 }
-                if (File.Exists(SafetyPath) && IsOriginalPackage(SafetyPath))
+                if (targetIsOriginal)
                 {
-                    File.Copy(SafetyPath, target + ".rlml-tmp", overwrite: true);
-                    File.Move(target + ".rlml-tmp", target, overwrite: true);
-                    return;
+                    // an older original is in place and nothing newer is saved: only the launcher can fix it
+                    throw new UserFacingException(
+                        "The Underpass file in the game folder is from an older version of Rocket League, and no newer copy is saved.\n\n" +
+                        "Verify Rocket League's files in the Epic Games / Steam / Heroic launcher – that puts the current Underpass back.");
                 }
             }
             catch (UnauthorizedAccessException ex)
             {
+                TryDelete(tmp);
                 throw new UserFacingException(
                     "Windows blocked writing to the Rocket League folder.\n\nRestart RL Map Loader as administrator and try again.",
                     needsAdmin: true, inner: ex);
             }
             catch (IOException ex) when (IsSharingViolation(ex))
             {
-                throw new UserFacingException(
-                    "Rocket League is using the Underpass map right now.\n\nLeave Free Play (go back to the main menu), then try again.",
-                    inner: ex);
+                TryDelete(tmp);
+                throw new UserFacingException(InUseMessage, inner: ex);
             }
             throw new UserFacingException(
                 "No backup of the original Underpass map was found.\n\nVerify Rocket League's files in the Epic Games / Steam launcher to restore it.");
         });
+
+        private static string OutdatedMessage(string backup, int game)
+        {
+            Log.Write($"Saved original {backup} is package {VersionText(PackageVersion(backup))}, the game is {VersionText(game)}");
+            return "The saved copy of the original Underpass is from an older version of Rocket League. Putting it back would " +
+                   "likely crash the game when you open Underpass.\n\n" +
+                   "Best fix: verify Rocket League's files in the Epic Games / Steam / Heroic launcher – that puts the current " +
+                   "Underpass back (RL Map Loader keeps that one from then on).";
+        }
 
         private static bool IsSharingViolation(IOException ex)
         {
